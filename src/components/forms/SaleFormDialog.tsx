@@ -33,6 +33,7 @@ import {
 } from "@/hooks/use-data";
 import { brl, todayISO } from "@/lib/format";
 import { toast } from "sonner";
+import { notifyNewSale } from "@/lib/dopamine-toast";
 import {
   CalendarDays,
   CreditCard,
@@ -651,7 +652,17 @@ export function SaleFormDialog({
         observacoes: form.observacoes || null,
         items: saleItems,
       });
-      toast.success(sale ? "Venda atualizada" : "Venda registrada");
+      if (sale) {
+        toast.success("Venda atualizada");
+      } else {
+        const clientName =
+          clients.find((client) => client.id === clientId)?.nome || newClientName || "Cliente";
+        notifyNewSale({
+          clientName,
+          amount: total,
+          payment: form.forma_pagamento.toUpperCase(),
+        });
+      }
       onOpenChange(false);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao salvar venda");

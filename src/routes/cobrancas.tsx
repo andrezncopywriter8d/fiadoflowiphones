@@ -9,6 +9,7 @@ import {
   useMarkReminderNotified,
   type ChargeNotification,
 } from "@/hooks/use-data";
+import { notifyChargeSent } from "@/lib/dopamine-toast";
 import { brl, fmtDate, todayISO } from "@/lib/format";
 import { openWhatsApp } from "@/lib/whatsapp";
 
@@ -55,7 +56,11 @@ function ChargesPage() {
     if (item.source !== "sale") {
       await markNotified.mutateAsync(item.id);
     }
-    toast.success("Mensagem de cobrança aberta no WhatsApp");
+    notifyChargeSent({
+      clientName: item.client.nome,
+      amount: chargeAmount(item),
+      product: item.sale?.descricao ?? item.descricao ?? "compra",
+    });
   };
 
   const todayCount = charges.filter((item) => item.data_lembrete === todayISO()).length;
