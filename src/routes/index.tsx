@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useDashboard, useProfile } from "@/hooks/use-data";
 import { SaleFormDialog } from "@/components/forms/SaleFormDialog";
 import { brl } from "@/lib/format";
+import appLogo from "@/assets/fiado-logo.png";
 import "../dashboard.css";
 
 export const Route = createFileRoute("/")({
@@ -138,7 +139,7 @@ function Dashboard() {
         {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="logo" title="Fiado.">
-            <span className="logo-dot" />
+            <img src={appLogo} alt="Fiado." />
           </div>
 
           <div className="welcome">

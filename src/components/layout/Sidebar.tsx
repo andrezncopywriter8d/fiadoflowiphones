@@ -12,6 +12,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useProfile, useDashboard } from "@/hooks/use-data";
+import { AppLogo } from "./AppLogo";
 
 const items = [
   { to: "/", label: "Visão Geral", icon: LayoutGrid },
@@ -35,14 +36,8 @@ export function Sidebar() {
 
   return (
     <aside className="hidden shrink-0 flex-col gap-5 rounded-l-[28px] bg-surface p-5 md:flex md:w-[268px]">
-      <div className="flex items-center gap-3 px-1 pt-1">
-        <div className="relative grid h-9 w-9 place-items-center rounded-full bg-primary shadow-soft">
-          <span className="text-sm font-semibold text-primary-foreground">F</span>
-          <span className="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-surface" />
-        </div>
-        <span className="text-[14px] font-semibold tracking-tight text-foreground/85">
-          Fia<span className="text-primary">do</span>.
-        </span>
+      <div className="px-1 pt-1">
+        <AppLogo />
       </div>
 
       <div className="px-1">

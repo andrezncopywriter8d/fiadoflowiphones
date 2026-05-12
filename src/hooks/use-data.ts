@@ -576,7 +576,7 @@ export function useReminders() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("reminders")
-        .select("*")
+        .select("*, client:clients(*), sale:sales(*)")
         .order("data_lembrete", { ascending: true });
       if (error) throw error;
       return (data ?? []) as Reminder[];
@@ -668,7 +668,11 @@ export function useUpsertReminder() {
         if (error) throw error;
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reminders"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      qc.invalidateQueries({ queryKey: ["charge-notifications"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 
@@ -679,7 +683,11 @@ export function useDeleteReminder() {
       const { error } = await supabase.from("reminders").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reminders"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      qc.invalidateQueries({ queryKey: ["charge-notifications"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 
@@ -744,7 +752,11 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: async (payload: Partial<Profile>) => {
       if (!user) throw new Error("not authenticated");
-      const { error } = await supabase.from("profiles").update(payload).eq("id", user.id);
+      const { error } = await supabase.from("profiles").upsert({
+        ...payload,
+        id: user.id,
+        email: payload.email ?? user.email ?? null,
+      });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),

@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { Loader2, ArrowRight } from "lucide-react";
+import { AppLogo } from "@/components/layout/AppLogo";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Entrar — Fiado." }] }),
@@ -43,8 +44,8 @@ function LoginPage() {
         toast.success("Bem-vindo de volta!");
         navigate({ to: "/" });
       }
-    } catch (err: any) {
-      toast.error(err.message ?? "Erro ao autenticar");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao autenticar");
     } finally {
       setSubmitting(false);
     }
@@ -53,14 +54,8 @@ function LoginPage() {
   return (
     <div className="min-h-screen w-full bg-background p-4 grid place-items-center">
       <div className="w-full max-w-[440px] rounded-[28px] bg-surface p-8 shadow-float">
-        <div className="flex items-center gap-3 mb-7">
-          <div className="relative h-10 w-10 rounded-full bg-primary grid place-items-center">
-            <span className="text-primary-foreground text-sm font-semibold">F</span>
-            <span className="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-surface" />
-          </div>
-          <span className="text-[15px] font-semibold tracking-tight text-foreground">
-            Fia<span className="text-primary">do</span>.
-          </span>
+        <div className="mb-7">
+          <AppLogo />
         </div>
 
         <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
