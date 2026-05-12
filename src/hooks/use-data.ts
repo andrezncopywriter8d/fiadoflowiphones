@@ -104,12 +104,17 @@ export function useUpsertClient() {
       if (!user) throw new Error("not authenticated");
       const { id, ...rest } = payload;
       if (id) {
-        const { error } = await supabase.from("clients").update(rest).eq("id", id);
+        const { data, error } = await supabase.from("clients").update(rest).eq("id", id).select().maybeSingle();
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from("clients").insert({ ...rest, user_id: user.id, nome: rest.nome ?? "" });
-        if (error) throw error;
+        return data as Client | null;
       }
+      const { data, error } = await supabase
+        .from("clients")
+        .insert({ ...rest, user_id: user.id, nome: rest.nome ?? "" })
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return data as Client | null;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clients"] }),
   });
