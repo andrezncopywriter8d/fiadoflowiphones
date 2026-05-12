@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useDashboard, useProfile } from "@/hooks/use-data";
 import { SaleFormDialog } from "@/components/forms/SaleFormDialog";
 import { brl } from "@/lib/format";
-import "./dashboard.css";
+import "../dashboard.css";
 
 export const Route = createFileRoute("/")({
   head: () => ({
