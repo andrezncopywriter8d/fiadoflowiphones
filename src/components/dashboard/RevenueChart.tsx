@@ -1,27 +1,32 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
-import { MoreHorizontal, ArrowRight, TrendingUp } from "lucide-react";
-
-const data = [
-  { mes: "Jan", recebido: 76500, fiado: 42000 },
-  { mes: "Fev", recebido: 92000, fiado: 38000 },
-  { mes: "Mar", recebido: 64000, fiado: 51000 },
-  { mes: "Abr", recebido: 110000, fiado: 47000 },
-  { mes: "Mai", recebido: 156098, fiado: 80112 },
-];
+import { MoreHorizontal, TrendingUp } from "lucide-react";
+import { useDashboard } from "@/hooks/use-data";
+import { brl } from "@/lib/format";
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl bg-ink text-ink-foreground px-3 py-2 shadow-ink">
-      <p className="text-[13px] font-semibold">
-        R$ {payload[0].value.toLocaleString("pt-BR")}
-      </p>
-      <p className="text-[10px] text-white/60">{label} 2024</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey} className="text-[12px] font-medium">
+          {p.dataKey === "recebido" ? "Recebido" : "Fiado"}: R$ {Number(p.value).toLocaleString("pt-BR")}
+        </p>
+      ))}
+      <p className="text-[10px] text-white/60 mt-0.5 capitalize">{label}</p>
     </div>
   );
 }
 
 export function RevenueChart() {
+  const { data: dash } = useDashboard();
+  const data = dash?.months ?? [];
+  const totalRecebido = data.reduce((a, m) => a + m.recebido, 0);
+  const totalFiado = data.reduce((a, m) => a + m.fiado, 0);
+  const prev = data[data.length - 2];
+  const cur = data[data.length - 1];
+  const pct = (a?: number, b?: number) =>
+    a && b ? `${(((a - b) / b) * 100).toFixed(0)}%` : "—";
+
   return (
     <div className="rounded-[22px] bg-surface p-6 shadow-soft h-full flex flex-col">
       <div className="flex items-start justify-between">
@@ -30,9 +35,7 @@ export function RevenueChart() {
             <TrendingUp className="h-4 w-4 text-primary" strokeWidth={2} />
           </div>
           <div>
-            <h3 className="text-[15px] font-semibold text-foreground">
-              Receita x Fiados
-            </h3>
+            <h3 className="text-[15px] font-semibold text-foreground">Receita x Fiados</h3>
             <p className="text-[11px] text-muted-foreground">Últimos 5 meses</p>
           </div>
         </div>
@@ -45,19 +48,19 @@ export function RevenueChart() {
         <div>
           <p className="text-[11px] text-muted-foreground">Recebido</p>
           <h4 className="mt-1 text-[22px] font-semibold tracking-tight text-foreground">
-            R$ 156.098,10
+            {brl(totalRecebido)}
           </h4>
-          <p className="mt-1 text-[10.5px] text-success font-medium">
-            ↑ 41% vs mês anterior
+          <p className="mt-1 text-[10.5px] text-muted-foreground">
+            Variação mês: {pct(cur?.recebido, prev?.recebido)}
           </p>
         </div>
         <div>
           <p className="text-[11px] text-muted-foreground">Fiado</p>
           <h4 className="mt-1 text-[22px] font-semibold tracking-tight text-foreground">
-            R$ 80.112,02
+            {brl(totalFiado)}
           </h4>
-          <p className="mt-1 text-[10.5px] text-success font-medium">
-            ↑ 2% vs mês anterior
+          <p className="mt-1 text-[10.5px] text-muted-foreground">
+            Variação mês: {pct(cur?.fiado, prev?.fiado)}
           </p>
         </div>
       </div>
@@ -76,7 +79,7 @@ export function RevenueChart() {
               axisLine={false}
               tickLine={false}
               tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
-              tickFormatter={(v) => `${v / 1000}k`}
+              tickFormatter={(v) => `${Math.round(v / 1000)}k`}
             />
             <Tooltip cursor={{ fill: "transparent" }} content={<CustomTooltip />} />
             <Bar dataKey="fiado" radius={[8, 8, 0, 0]} maxBarSize={28}>
@@ -91,10 +94,6 @@ export function RevenueChart() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-
-        <button className="absolute right-2 bottom-12 h-9 w-9 rounded-full bg-surface-muted grid place-items-center text-foreground/70 hover:text-primary shadow-soft">
-          <ArrowRight className="h-4 w-4" />
-        </button>
       </div>
     </div>
   );
