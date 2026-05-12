@@ -7,7 +7,6 @@ import { PaymentDialog } from "@/components/forms/PaymentDialog";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { brl, fmtDate } from "@/lib/format";
 import { Plus, Pencil, Trash2, Wallet, MessageCircle } from "lucide-react";
-import { onlyDigits } from "@/lib/format";
 import { wppTemplates, openWhatsApp } from "@/lib/whatsapp";
 import { toast } from "sonner";
 
