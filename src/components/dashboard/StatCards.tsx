@@ -1,5 +1,5 @@
 import { ArrowUpRight, ArrowDown } from "lucide-react";
-import { Bar, BarChart, ResponsiveContainer } from "recharts";
+import { Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
 
 const barData = [
   { v: 8 }, { v: 14 }, { v: 9 }, { v: 18 }, { v: 12 },
@@ -54,7 +54,7 @@ export function StatCards() {
             <BarChart data={barData} barCategoryGap={4}>
               <Bar dataKey="v" radius={[4, 4, 4, 4]}>
                 {barData.map((_, i) => (
-                  <rect
+                  <Cell
                     key={i}
                     fill={i === 7 ? "var(--color-primary)" : "var(--color-chart-2)"}
                   />
