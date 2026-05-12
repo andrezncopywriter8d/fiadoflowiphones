@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutGrid,
   Users,
+  Package,
   ShoppingBag,
   Wallet,
   BellRing,
@@ -15,6 +16,7 @@ import { useProfile, useDashboard } from "@/hooks/use-data";
 const items = [
   { to: "/", label: "Visão Geral", icon: LayoutGrid },
   { to: "/clientes", label: "Clientes", icon: Users },
+  { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/vendas", label: "Vendas", icon: ShoppingBag },
   { to: "/pagamentos", label: "Pagamentos", icon: Wallet },
   { to: "/cobrancas", label: "Cobranças", icon: BellRing },
@@ -28,8 +30,7 @@ export function Sidebar() {
   const { data: profile } = useProfile();
   const { data: dash } = useDashboard();
 
-  const firstName =
-    profile?.nome?.split(" ")[0] ?? profile?.email?.split("@")[0] ?? "você";
+  const firstName = profile?.nome?.split(" ")[0] ?? profile?.email?.split("@")[0] ?? "você";
   const overdueCount = dash?.overdueSales?.length ?? 0;
 
   return (
@@ -64,6 +65,7 @@ export function Sidebar() {
             <Link
               key={item.to}
               to={item.to}
+              preload="intent"
               className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${
                 active
                   ? "bg-surface text-primary shadow-soft"
@@ -97,6 +99,7 @@ export function Sidebar() {
         <p className="mt-3 text-[10.5px] text-white/60">clientes com pendência</p>
         <Link
           to="/cobrancas"
+          preload="intent"
           className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white text-ink px-4 py-2.5 text-[12px] font-medium hover:opacity-95 transition"
         >
           Ver cobranças <ArrowRight className="h-3.5 w-3.5" />

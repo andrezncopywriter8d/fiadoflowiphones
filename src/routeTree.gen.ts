@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
+import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as PagamentosRouteImport } from './routes/pagamentos'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LembretesRouteImport } from './routes/lembretes'
@@ -27,6 +28,11 @@ const VendasRoute = VendasRouteImport.update({
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProdutosRoute = ProdutosRouteImport.update({
+  id: '/produtos',
+  path: '/produtos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PagamentosRoute = PagamentosRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
+  '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/vendas': typeof VendasRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
+  '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/vendas': typeof VendasRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
+  '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/vendas': typeof VendasRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/lembretes'
     | '/login'
     | '/pagamentos'
+    | '/produtos'
     | '/relatorios'
     | '/vendas'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/lembretes'
     | '/login'
     | '/pagamentos'
+    | '/produtos'
     | '/relatorios'
     | '/vendas'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/lembretes'
     | '/login'
     | '/pagamentos'
+    | '/produtos'
     | '/relatorios'
     | '/vendas'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   LembretesRoute: typeof LembretesRoute
   LoginRoute: typeof LoginRoute
   PagamentosRoute: typeof PagamentosRoute
+  ProdutosRoute: typeof ProdutosRoute
   RelatoriosRoute: typeof RelatoriosRoute
   VendasRoute: typeof VendasRoute
 }
@@ -161,6 +174,13 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/produtos': {
+      id: '/produtos'
+      path: '/produtos'
+      fullPath: '/produtos'
+      preLoaderRoute: typeof ProdutosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pagamentos': {
@@ -223,9 +243,20 @@ const rootRouteChildren: RootRouteChildren = {
   LembretesRoute: LembretesRoute,
   LoginRoute: LoginRoute,
   PagamentosRoute: PagamentosRoute,
+  ProdutosRoute: ProdutosRoute,
   RelatoriosRoute: RelatoriosRoute,
   VendasRoute: VendasRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

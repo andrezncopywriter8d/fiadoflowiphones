@@ -30,11 +30,16 @@ function Page() {
     try {
       await del.mutateAsync(s.id);
       toast.success("Venda excluída");
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir venda");
+    }
   };
 
   const cobrar = (s: Sale) => {
-    if (!s.client?.telefone) { toast.error("Cliente sem telefone"); return; }
+    if (!s.client?.telefone) {
+      toast.error("Cliente sem telefone");
+      return;
+    }
     const msg = wppTemplates[0].build({
       nome: s.client.nome,
       valor: s.saldo_restante,
@@ -45,15 +50,22 @@ function Page() {
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-6">
+      <div className="motion-list flex flex-col gap-6">
         <div className="flex items-end justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Vendas fiadas</h1>
-            <p className="text-[13px] text-muted-foreground mt-1">Registre, cobre e acompanhe suas vendas a prazo.</p>
+            <h1 className="text-[28px] font-semibold tracking-tight text-foreground">
+              Vendas fiadas
+            </h1>
+            <p className="text-[13px] text-muted-foreground mt-1">
+              Registre, cobre e acompanhe suas vendas a prazo.
+            </p>
           </div>
           <button
-            onClick={() => { setEditing(null); setOpenSale(true); }}
-            className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-[12px] font-medium hover:opacity-95 shadow-soft"
+            onClick={() => {
+              setEditing(null);
+              setOpenSale(true);
+            }}
+            className="motion-pop inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-[12px] font-medium hover:opacity-95 shadow-soft"
           >
             <Plus className="h-3.5 w-3.5" /> Nova venda
           </button>
@@ -70,8 +82,10 @@ function Page() {
             <button
               key={f.v}
               onClick={() => setFilter(f.v)}
-              className={`rounded-full px-3.5 py-1.5 text-[12px] font-medium border transition ${
-                filter === f.v ? "bg-primary text-primary-foreground border-primary" : "bg-surface border-border text-foreground/70 hover:bg-muted"
+              className={`motion-pop rounded-full px-3.5 py-1.5 text-[12px] font-medium border transition ${
+                filter === f.v
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-surface border-border text-foreground/70 hover:bg-muted"
               }`}
             >
               {f.label}
@@ -94,24 +108,38 @@ function Page() {
                 </tr>
               </thead>
               <tbody>
-                {isLoading && <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">Carregando…</td></tr>}
+                {isLoading && (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                      Carregando…
+                    </td>
+                  </tr>
+                )}
                 {!isLoading && filtered.length === 0 && (
-                  <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">Nenhuma venda registrada.</td></tr>
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                      Nenhuma venda registrada.
+                    </td>
+                  </tr>
                 )}
                 {filtered.map((s) => (
                   <tr key={s.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="py-3 font-medium">{s.client?.nome ?? "—"}</td>
-                    <td className="py-3 text-muted-foreground max-w-[260px] truncate">{s.descricao}</td>
+                    <td className="py-3 text-muted-foreground max-w-[260px] truncate">
+                      {s.descricao}
+                    </td>
                     <td className="py-3 text-muted-foreground">{fmtDate(s.data_vencimento)}</td>
                     <td className="py-3 text-right">{brl(s.valor_total)}</td>
                     <td className="py-3 text-right font-medium">{brl(s.saldo_restante)}</td>
-                    <td className="py-3"><StatusBadge status={s.status} /></td>
+                    <td className="py-3">
+                      <StatusBadge status={s.status} />
+                    </td>
                     <td className="py-3">
                       <div className="flex justify-end gap-1.5">
                         {s.saldo_restante > 0 && (
                           <button
                             onClick={() => setPaying(s)}
-                            className="h-8 w-8 rounded-full bg-primary/10 text-primary grid place-items-center hover:bg-primary/20"
+                            className="motion-pop h-8 w-8 rounded-full bg-primary/10 text-primary grid place-items-center hover:bg-primary/20"
                             title="Registrar pagamento"
                           >
                             <Wallet className="h-3.5 w-3.5" />
@@ -120,16 +148,27 @@ function Page() {
                         {s.client?.telefone && s.saldo_restante > 0 && (
                           <button
                             onClick={() => cobrar(s)}
-                            className="h-8 w-8 rounded-full bg-success/10 text-success grid place-items-center hover:bg-success/20"
+                            className="motion-pop h-8 w-8 rounded-full bg-success/10 text-success grid place-items-center hover:bg-success/20"
                             title="Cobrar via WhatsApp"
                           >
                             <MessageCircle className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        <button onClick={() => { setEditing(s); setOpenSale(true); }} className="h-8 w-8 rounded-full bg-muted grid place-items-center hover:bg-muted/70" title="Editar">
+                        <button
+                          onClick={() => {
+                            setEditing(s);
+                            setOpenSale(true);
+                          }}
+                          className="motion-pop h-8 w-8 rounded-full bg-muted grid place-items-center hover:bg-muted/70"
+                          title="Editar"
+                        >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => askDelete(s)} className="h-8 w-8 rounded-full bg-destructive/10 text-destructive grid place-items-center hover:bg-destructive/20" title="Excluir">
+                        <button
+                          onClick={() => askDelete(s)}
+                          className="motion-pop h-8 w-8 rounded-full bg-destructive/10 text-destructive grid place-items-center hover:bg-destructive/20"
+                          title="Excluir"
+                        >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 const tabs = [
   { to: "/", label: "Dashboard" },
   { to: "/clientes", label: "Clientes" },
+  { to: "/produtos", label: "Produtos" },
   { to: "/vendas", label: "Vendas" },
   { to: "/pagamentos", label: "Pagamentos" },
   { to: "/cobrancas", label: "Cobranças" },
@@ -37,6 +38,7 @@ export function TopNav() {
             <Link
               key={t.to}
               to={t.to}
+              preload="intent"
               className={`px-4 py-2 rounded-full text-[12.5px] font-medium transition ${
                 active
                   ? "bg-surface text-foreground shadow-soft"

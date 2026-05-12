@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -64,7 +65,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Fiado. — CRM Financeiro" },
-      { name: "description", content: "Controle suas vendas fiadas, pagamentos e clientes em um só lugar." },
+      {
+        name: "description",
+        content: "Controle suas vendas fiadas, pagamentos e clientes em um só lugar.",
+      },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
   }),
@@ -90,10 +94,14 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Outlet />
+        <div key={pathname} className="route-transition">
+          <Outlet />
+        </div>
         <Toaster richColors position="top-right" />
       </AuthProvider>
     </QueryClientProvider>

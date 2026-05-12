@@ -13,7 +13,10 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Painel — Fiado." },
-      { name: "description", content: "Controle suas vendas fiadas, pagamentos e clientes em um só lugar." },
+      {
+        name: "description",
+        content: "Controle suas vendas fiadas, pagamentos e clientes em um só lugar.",
+      },
     ],
   }),
   component: Dashboard,
@@ -21,7 +24,8 @@ export const Route = createFileRoute("/")({
 
 const menuItems = [
   { label: "Overview", icon: "▦", to: "/" as const },
-  { label: "Clientes", icon: "◌", to: "/clientes" as const },
+  { label: "Clientes", icon: "○", to: "/clientes" as const },
+  { label: "Produtos", icon: "□", to: "/produtos" as const },
   { label: "Vendas", icon: "▣", to: "/vendas" as const },
   { label: "Pagamentos", icon: "▭", to: "/pagamentos" as const },
   { label: "Cobranças", icon: "♧", to: "/cobrancas" as const },
@@ -31,6 +35,7 @@ const menuItems = [
 const navItems = [
   { label: "Dashboard", to: "/" as const },
   { label: "Clientes", to: "/clientes" as const },
+  { label: "Produtos", to: "/produtos" as const },
   { label: "Vendas", to: "/vendas" as const },
   { label: "Pagamentos", to: "/pagamentos" as const },
   { label: "Cobranças", to: "/cobrancas" as const },
@@ -85,25 +90,25 @@ function Dashboard() {
         const max = Math.max(...months.map((m) => m.recebido), 1);
         const padded = [...months];
         while (padded.length < 9) padded.unshift({ mes: "", recebido: 0, fiado: 0, key: "" });
-        return padded.slice(-9).map((m, i) => [
-          Math.max(20, Math.round((m.recebido / max) * 80)),
-          i >= 3 && i <= 5 && m.recebido > 0,
-        ]) as [number, boolean][];
+        return padded
+          .slice(-9)
+          .map((m, i) => [
+            Math.max(20, Math.round((m.recebido / max) * 80)),
+            i >= 3 && i <= 5 && m.recebido > 0,
+          ]) as [number, boolean][];
       })()
     : Array.from({ length: 9 }).map((_, i) => [30 + ((i * 11) % 50), false] as [number, boolean]);
 
-  const chartMax = Math.max(
-    ...months.map((m) => Math.max(m.recebido, m.fiado)),
-    1
-  );
-  const chartData = (months.length
-    ? months
-    : Array.from({ length: 5 }).map((_, i) => ({
-        mes: ["Jan", "Fev", "Mar", "Abr", "Mai"][i],
-        recebido: 0,
-        fiado: 0,
-        key: "",
-      }))
+  const chartMax = Math.max(...months.map((m) => Math.max(m.recebido, m.fiado)), 1);
+  const chartData = (
+    months.length
+      ? months
+      : Array.from({ length: 5 }).map((_, i) => ({
+          mes: ["Jan", "Fev", "Mar", "Abr", "Mai"][i],
+          recebido: 0,
+          fiado: 0,
+          key: "",
+        }))
   ).map((m) => ({
     month: m.mes,
     grey: Math.max(2, Math.round((m.fiado / chartMax) * 90)),
@@ -115,8 +120,7 @@ function Dashboard() {
   const recCur = months[months.length - 1]?.recebido ?? 0;
   const fiaPrev = months[months.length - 2]?.fiado ?? 0;
   const fiaCur = months[months.length - 1]?.fiado ?? 0;
-  const variation = (a: number, b: number) =>
-    b ? `${(((a - b) / b) * 100).toFixed(0)}%` : "—";
+  const variation = (a: number, b: number) => (b ? `${(((a - b) / b) * 100).toFixed(0)}%` : "—");
 
   const firstName = profile?.nome?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "você";
   const email = profile?.email ?? user?.email ?? "";
@@ -150,11 +154,7 @@ function Dashboard() {
             {menuItems.map((item) => {
               const active = pathname === item.to;
               return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`side-item ${active ? "active" : ""}`}
-                >
+                <Link key={item.to} to={item.to} className={`side-item ${active ? "active" : ""}`}>
                   <span className="side-icon">{item.icon}</span>
                   {item.label}
                 </Link>
@@ -164,7 +164,13 @@ function Dashboard() {
 
           <div className="sidebar-actions">
             <button className="round-btn">⌄</button>
-            <Link to="/configuracoes" className="round-btn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>⚙</Link>
+            <Link
+              to="/configuracoes"
+              className="round-btn"
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            >
+              ⚙
+            </Link>
             <button className="round-btn dark">✣</button>
             <button className="round-btn active">◇</button>
           </div>
@@ -192,7 +198,11 @@ function Dashboard() {
               <br />
               precisando de atenção
             </p>
-            <Link to="/cobrancas" className="unlock-btn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+            <Link
+              to="/cobrancas"
+              className="unlock-btn"
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            >
               Ver cobranças
             </Link>
           </div>
@@ -213,16 +223,38 @@ function Dashboard() {
             </nav>
 
             <div className="profile-area">
-              <button className="icon-btn" title="Notificações">♧</button>
-              <button className="icon-btn" title="Mensagens">✉</button>
+              <button className="icon-btn" title="Notificações">
+                ♧
+              </button>
+              <button className="icon-btn" title="Mensagens">
+                ✉
+              </button>
 
               <div className="profile">
-                <div className="profile-avatar" style={{ display: "grid", placeItems: "center", color: "#fff", fontWeight: 600, fontSize: 14 }}>
+                <div
+                  className="profile-avatar"
+                  style={{
+                    display: "grid",
+                    placeItems: "center",
+                    color: "#fff",
+                    fontWeight: 600,
+                    fontSize: 14,
+                  }}
+                >
                   {initials}
                 </div>
                 <div style={{ flex: 1 }}>
                   <h3 style={{ textTransform: "capitalize" }}>{firstName}</h3>
-                  <p style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</p>
+                  <p
+                    style={{
+                      maxWidth: 140,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {email}
+                  </p>
                 </div>
                 <button
                   className="icon-btn"
@@ -243,9 +275,13 @@ function Dashboard() {
             <div className="panel-header">
               <h2>Painel de Cobranças</h2>
               <div className="panel-actions">
-                <button className="circle-action" title="Filtrar">◉</button>
-                <button className="soft-action">◎ Filtrar período</button>
-                <button className="circle-action" title="Exportar">□</button>
+                <button className="circle-action" title="Filtrar">
+                  ◎
+                </button>
+                <button className="soft-action">● Filtrar período</button>
+                <button className="circle-action" title="Exportar">
+                  □
+                </button>
                 <button
                   className="soft-action"
                   onClick={() => {
@@ -278,7 +314,11 @@ function Dashboard() {
                   </div>
                 </div>
                 <p>Vendas registradas no mês</p>
-                <Link to="/vendas" className="mini-outline" style={{ display: "inline-flex", alignItems: "center" }}>
+                <Link
+                  to="/vendas"
+                  className="mini-outline"
+                  style={{ display: "inline-flex", alignItems: "center" }}
+                >
                   Ver vendas
                 </Link>
               </div>
@@ -290,7 +330,11 @@ function Dashboard() {
                     <h4>Total recebido</h4>
                     <p>{brl(totalRecebido)} no mês</p>
                   </div>
-                  <Link to="/pagamentos" className="view-all" style={{ display: "inline-flex", alignItems: "center" }}>
+                  <Link
+                    to="/pagamentos"
+                    className="view-all"
+                    style={{ display: "inline-flex", alignItems: "center" }}
+                  >
                     Ver todos
                   </Link>
                 </div>
@@ -317,7 +361,11 @@ function Dashboard() {
                     <h4>Clientes em aberto</h4>
                     <p>{totals?.totalClientes ?? 0} cadastrados</p>
                   </div>
-                  <Link to="/clientes" className="view-all" style={{ display: "inline-flex", alignItems: "center" }}>
+                  <Link
+                    to="/clientes"
+                    className="view-all"
+                    style={{ display: "inline-flex", alignItems: "center" }}
+                  >
                     Ver todos
                   </Link>
                 </div>
@@ -375,14 +423,19 @@ function Dashboard() {
                   </div>
                   <h4>Cobranças de hoje</h4>
                   <p style={{ marginTop: 6, color: "#777", fontSize: 13 }}>
-                    {cobrancasHoje} {cobrancasHoje === 1 ? "cliente aguardando" : "clientes aguardando"} contato
+                    {cobrancasHoje}{" "}
+                    {cobrancasHoje === 1 ? "cliente aguardando" : "clientes aguardando"} contato
                   </p>
                   <div className="small-actions">
                     <button title="WhatsApp">◴</button>
                     <button title="Ligar">▷</button>
                     <button title="E-mail">♇</button>
                   </div>
-                  <Link to="/cobrancas" className="view-all item-btn" style={{ display: "inline-flex", alignItems: "center" }}>
+                  <Link
+                    to="/cobrancas"
+                    className="view-all item-btn"
+                    style={{ display: "inline-flex", alignItems: "center" }}
+                  >
                     Ver todas
                   </Link>
                 </div>
@@ -421,7 +474,12 @@ function Dashboard() {
               <div className="card big-chart-card">
                 <div className="big-chart-head">
                   <div className="title-with-icon">
-                    <div className="purple-icon" style={{ background: "#eeedff", color: "#5b55f6" }}>◎</div>
+                    <div
+                      className="purple-icon"
+                      style={{ background: "#eeedff", color: "#5b55f6" }}
+                    >
+                      ●
+                    </div>
                     <h4>Receita x Fiados — últimos 5 meses</h4>
                   </div>
                   <button className="dots">•••</button>
@@ -432,8 +490,7 @@ function Dashboard() {
                     <span>Recebido</span>
                     <strong>{brl(totalRecebido)}</strong>
                     <p>
-                      ↗ {variation(recCur, recPrev)}{" "}
-                      <em>vs mês anterior</em>
+                      ↗ {variation(recCur, recPrev)} <em>vs mês anterior</em>
                     </p>
                   </div>
                   <div className="metric-divider" />
