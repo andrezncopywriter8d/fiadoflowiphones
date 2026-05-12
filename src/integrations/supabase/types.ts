@@ -14,7 +14,293 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      charge_logs: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          data_cobranca: string
+          id: string
+          mensagem_usada: string | null
+          sale_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          data_cobranca?: string
+          id?: string
+          mensagem_usada?: string | null
+          sale_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          data_cobranca?: string
+          id?: string
+          mensagem_usada?: string | null
+          sale_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "charge_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "charge_logs_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          cpf: string | null
+          created_at: string
+          endereco: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          status: string
+          telefone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cpf?: string | null
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cpf?: string | null
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          client_id: string
+          created_at: string
+          data_pagamento: string
+          forma_pagamento: string | null
+          id: string
+          observacoes: string | null
+          sale_id: string
+          user_id: string
+          valor_pago: number
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          data_pagamento?: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          sale_id: string
+          user_id: string
+          valor_pago: number
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          data_pagamento?: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          sale_id?: string
+          user_id?: string
+          valor_pago?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          loja_nome: string | null
+          nome: string | null
+          pix_chave: string | null
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          loja_nome?: string | null
+          nome?: string | null
+          pix_chave?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          loja_nome?: string | null
+          nome?: string | null
+          pix_chave?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      reminders: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          data_lembrete: string
+          descricao: string | null
+          horario_lembrete: string | null
+          id: string
+          sale_id: string | null
+          status: string
+          titulo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          data_lembrete: string
+          descricao?: string | null
+          horario_lembrete?: string | null
+          id?: string
+          sale_id?: string | null
+          status?: string
+          titulo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          data_lembrete?: string
+          descricao?: string | null
+          horario_lembrete?: string | null
+          id?: string
+          sale_id?: string | null
+          status?: string
+          titulo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminders_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales: {
+        Row: {
+          client_id: string
+          created_at: string
+          data_vencimento: string | null
+          data_venda: string
+          descricao: string
+          forma_pagamento: string | null
+          id: string
+          observacoes: string | null
+          saldo_restante: number
+          status: string
+          updated_at: string
+          user_id: string
+          valor_pago: number
+          valor_total: number
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          data_vencimento?: string | null
+          data_venda?: string
+          descricao: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          saldo_restante?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+          valor_pago?: number
+          valor_total?: number
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          data_vencimento?: string | null
+          data_venda?: string
+          descricao?: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          saldo_restante?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+          valor_pago?: number
+          valor_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
