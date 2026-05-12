@@ -664,28 +664,34 @@ export function useReminders() {
   });
 }
 
-export function useChargeNotifications(date = isoDate(new Date())) {
+export function useChargeNotifications(
+  date = isoDate(new Date()),
+  scope: "all" | "today" = "today",
+) {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["charge-notifications", user?.id, date],
+    queryKey: ["charge-notifications", user?.id, date, scope],
     enabled: !!user,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const [remindersRes, salesRes] = await Promise.all([
-        supabase
-          .from("reminders")
-          .select("*, client:clients(*), sale:sales(*)")
-          .lte("data_lembrete", date)
-          .eq("status", "pendente")
-          .order("data_lembrete", { ascending: true }),
-        supabase
-          .from("sales")
-          .select("*, client:clients(*)")
-          .gt("saldo_restante", 0)
-          .or(`data_vencimento.is.null,data_vencimento.lte.${date}`)
-          .order("data_vencimento", { ascending: true, nullsFirst: false })
-          .order("created_at", { ascending: true }),
-      ]);
+      let remindersQuery = supabase
+        .from("reminders")
+        .select("*, client:clients(*), sale:sales(*)")
+        .eq("status", "pendente")
+        .order("data_lembrete", { ascending: true });
+      let salesQuery = supabase
+        .from("sales")
+        .select("*, client:clients(*)")
+        .gt("saldo_restante", 0)
+        .order("data_vencimento", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true });
+
+      if (scope === "today") {
+        remindersQuery = remindersQuery.eq("data_lembrete", date);
+        salesQuery = salesQuery.eq("data_vencimento", date);
+      }
+
+      const [remindersRes, salesRes] = await Promise.all([remindersQuery, salesQuery]);
 
       if (remindersRes.error) throw remindersRes.error;
       if (salesRes.error) throw salesRes.error;

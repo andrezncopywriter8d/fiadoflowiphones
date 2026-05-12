@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { BellRing, CalendarClock, CheckCircle2, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -23,6 +24,8 @@ export const Route = createFileRoute("/cobrancas")({
   component: ChargesPage,
 });
 
+type ChargeFilter = "all" | "today";
+
 const chargeAmount = (item: ChargeNotification) =>
   item.sale?.valor_parcela ?? item.sale?.saldo_restante ?? 0;
 
@@ -42,9 +45,17 @@ const buildMessage = (item: ChargeNotification) => {
 };
 
 function ChargesPage() {
-  const { data: charges = [], isLoading } = useChargeNotifications(todayISO());
+  const today = todayISO();
+  const [filter, setFilter] = useState<ChargeFilter>("all");
+  const { data: allCharges = [], isLoading } = useChargeNotifications(today, "all");
   const logCharge = useLogCharge();
   const markNotified = useMarkReminderNotified();
+
+  const visibleCharges = useMemo(
+    () =>
+      filter === "today" ? allCharges.filter((item) => item.data_lembrete === today) : allCharges,
+    [allCharges, filter, today],
+  );
 
   const sendCharge = async (item: ChargeNotification) => {
     if (!item.client?.telefone) {
@@ -69,18 +80,39 @@ function ChargesPage() {
     });
   };
 
-  const todayCount = charges.filter((item) => item.data_lembrete === todayISO()).length;
-  const overdueCount = charges.length - todayCount;
-  const totalDue = charges.reduce((acc, item) => acc + chargeAmount(item), 0);
+  const todayCount = allCharges.filter((item) => item.data_lembrete === today).length;
+  const overdueCount = allCharges.filter((item) => item.data_lembrete < today).length;
+  const totalDue = visibleCharges.reduce((acc, item) => acc + chargeAmount(item), 0);
 
   return (
     <AppShell>
       <div className="motion-list flex min-w-0 flex-col gap-4 sm:gap-6">
-        <div>
-          <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Cobranças</h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            Vendas em aberto e notificações do dia prontas para enviar.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Cobranças</h1>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Vendas em aberto e notificações prontas para enviar.
+            </p>
+          </div>
+          <div className="inline-flex w-full rounded-full bg-surface p-1 shadow-soft sm:w-auto">
+            {[
+              { value: "all" as const, label: "Todas" },
+              { value: "today" as const, label: "Hoje" },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setFilter(item.value)}
+                className={`h-9 flex-1 rounded-full px-4 text-xs font-semibold transition sm:flex-none ${
+                  filter === item.value
+                    ? "bg-primary text-primary-foreground shadow-soft"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -96,7 +128,7 @@ function ChargesPage() {
           </div>
           <div className="rounded-[22px] bg-surface p-5 shadow-soft">
             <CheckCircle2 className="h-5 w-5 text-success" />
-            <p className="mt-3 text-xs text-muted-foreground">Valor a cobrar</p>
+            <p className="mt-3 text-xs text-muted-foreground">Valor no filtro</p>
             <strong className="mt-1 block text-2xl">{brl(totalDue)}</strong>
           </div>
         </div>
@@ -121,14 +153,14 @@ function ChargesPage() {
                     </td>
                   </tr>
                 )}
-                {!isLoading && charges.length === 0 && (
+                {!isLoading && visibleCharges.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-10 text-center text-muted-foreground">
-                      Nenhuma cobrança pendente encontrada.
+                      Nenhuma cobrança encontrada neste filtro.
                     </td>
                   </tr>
                 )}
-                {charges.map((item) => (
+                {visibleCharges.map((item) => (
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="py-3 text-muted-foreground">{fmtDate(item.data_lembrete)}</td>
                     <td className="truncate py-3 pr-3 font-medium">{item.client?.nome ?? "-"}</td>
@@ -160,12 +192,12 @@ function ChargesPage() {
                 Carregando cobranças...
               </p>
             )}
-            {!isLoading && charges.length === 0 && (
+            {!isLoading && visibleCharges.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                Nenhuma cobrança pendente encontrada.
+                Nenhuma cobrança encontrada neste filtro.
               </p>
             )}
-            {charges.map((item) => (
+            {visibleCharges.map((item) => (
               <div key={item.id} className="rounded-2xl border border-border px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
