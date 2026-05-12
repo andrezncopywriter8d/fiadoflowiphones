@@ -147,6 +147,3 @@ function Page() {
     </AppShell>
   );
 }
-
-// keep import used
-void onlyDigits;
