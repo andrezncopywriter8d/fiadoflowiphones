@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { SecondRow } from "@/components/dashboard/SecondRow";
-import { Filter, Download, RefreshCw } from "lucide-react";
+import { SaleFormDialog } from "@/components/forms/SaleFormDialog";
+import { Filter, Download, RefreshCw, Plus } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -15,6 +19,9 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
+  const [openSale, setOpenSale] = useState(false);
+  const qc = useQueryClient();
+
   return (
     <AppShell>
       <div className="flex flex-col gap-8">
@@ -31,7 +38,22 @@ function Dashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <PillButton icon={Filter}>Filtrar período</PillButton>
             <PillButton icon={Download}>Exportar</PillButton>
-            <PillButton icon={RefreshCw}>Atualizar dados</PillButton>
+            <PillButton
+              icon={RefreshCw}
+              onClick={() => {
+                qc.invalidateQueries();
+                toast.success("Dados atualizados");
+              }}
+            >
+              Atualizar dados
+            </PillButton>
+            <button
+              onClick={() => setOpenSale(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-[12px] font-medium hover:opacity-95 transition shadow-soft"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nova venda
+            </button>
           </div>
         </div>
 
@@ -41,6 +63,8 @@ function Dashboard() {
           <SecondRow />
         </div>
       </div>
+
+      <SaleFormDialog open={openSale} onOpenChange={setOpenSale} />
     </AppShell>
   );
 }
@@ -48,12 +72,17 @@ function Dashboard() {
 function PillButton({
   icon: Icon,
   children,
+  onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
+  onClick?: () => void;
 }) {
   return (
-    <button className="inline-flex items-center gap-2 rounded-full bg-surface border border-border px-4 py-2 text-[12px] font-medium text-foreground/80 hover:bg-surface-muted hover:text-foreground transition shadow-soft">
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-full bg-surface border border-border px-4 py-2 text-[12px] font-medium text-foreground/80 hover:bg-surface-muted hover:text-foreground transition shadow-soft"
+    >
       <Icon className="h-3.5 w-3.5" />
       {children}
     </button>

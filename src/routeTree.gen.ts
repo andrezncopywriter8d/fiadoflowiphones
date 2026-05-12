@@ -13,6 +13,7 @@ import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as PagamentosRouteImport } from './routes/pagamentos'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LembretesRouteImport } from './routes/lembretes'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as CobrancasRouteImport } from './routes/cobrancas'
 import { Route as ClientesRouteImport } from './routes/clientes'
@@ -36,6 +37,11 @@ const PagamentosRoute = PagamentosRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LembretesRoute = LembretesRouteImport.update({
+  id: '/lembretes',
+  path: '/lembretes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/clientes': typeof ClientesRoute
   '/cobrancas': typeof CobrancasRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof ClientesRoute
   '/cobrancas': typeof CobrancasRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/clientes': typeof ClientesRoute
   '/cobrancas': typeof CobrancasRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/cobrancas'
     | '/configuracoes'
+    | '/lembretes'
     | '/login'
     | '/pagamentos'
     | '/relatorios'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/cobrancas'
     | '/configuracoes'
+    | '/lembretes'
     | '/login'
     | '/pagamentos'
     | '/relatorios'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/cobrancas'
     | '/configuracoes'
+    | '/lembretes'
     | '/login'
     | '/pagamentos'
     | '/relatorios'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   ClientesRoute: typeof ClientesRoute
   CobrancasRoute: typeof CobrancasRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  LembretesRoute: typeof LembretesRoute
   LoginRoute: typeof LoginRoute
   PagamentosRoute: typeof PagamentosRoute
   RelatoriosRoute: typeof RelatoriosRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lembretes': {
+      id: '/lembretes'
+      path: '/lembretes'
+      fullPath: '/lembretes'
+      preLoaderRoute: typeof LembretesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/configuracoes': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClientesRoute: ClientesRoute,
   CobrancasRoute: CobrancasRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  LembretesRoute: LembretesRoute,
   LoginRoute: LoginRoute,
   PagamentosRoute: PagamentosRoute,
   RelatoriosRoute: RelatoriosRoute,
