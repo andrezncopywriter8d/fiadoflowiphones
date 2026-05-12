@@ -15,7 +15,7 @@ import { openWhatsApp } from "@/lib/whatsapp";
 export const Route = createFileRoute("/cobrancas")({
   head: () => ({
     meta: [
-      { title: "Cobranças — Fiado." },
+      { title: "Cobranças - Fiado." },
       { name: "description", content: "Cobranças de hoje, vencidas e próximas." },
     ],
   }),
@@ -52,7 +52,9 @@ function ChargesPage() {
       sale_id: item.sale_id ?? undefined,
       mensagem_usada: message,
     });
-    await markNotified.mutateAsync(item.id);
+    if (item.source !== "sale") {
+      await markNotified.mutateAsync(item.id);
+    }
     toast.success("Mensagem de cobrança aberta no WhatsApp");
   };
 
@@ -67,7 +69,7 @@ function ChargesPage() {
           <div>
             <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Cobranças</h1>
             <p className="text-[13px] text-muted-foreground mt-1">
-              Notificações do dia com cliente, valor e produto prontos para enviar.
+              Vendas em aberto e notificações do dia prontas para enviar.
             </p>
           </div>
         </div>
@@ -113,16 +115,16 @@ function ChargesPage() {
                 {!isLoading && charges.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-10 text-center text-muted-foreground">
-                      Nenhuma cobrança pendente para hoje.
+                      Nenhuma cobrança pendente encontrada.
                     </td>
                   </tr>
                 )}
                 {charges.map((item) => (
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="py-3 text-muted-foreground">{fmtDate(item.data_lembrete)}</td>
-                    <td className="py-3 font-medium">{item.client?.nome ?? "—"}</td>
+                    <td className="py-3 font-medium">{item.client?.nome ?? "-"}</td>
                     <td className="py-3 text-muted-foreground max-w-[300px] truncate">
-                      {item.sale?.descricao ?? item.descricao ?? "—"}
+                      {item.sale?.descricao ?? item.descricao ?? "-"}
                     </td>
                     <td className="py-3 text-right font-medium">{brl(chargeAmount(item))}</td>
                     <td className="py-3 text-right">

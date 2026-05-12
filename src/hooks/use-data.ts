@@ -96,6 +96,7 @@ export type Reminder = {
 export type ChargeNotification = Reminder & {
   client: Client | null;
   sale: Sale | null;
+  source?: "reminder" | "sale";
 };
 
 export type Profile = {
@@ -590,14 +591,59 @@ export function useChargeNotifications(date = isoDate(new Date())) {
     enabled: !!user,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("reminders")
-        .select("*, client:clients(*), sale:sales(*)")
-        .lte("data_lembrete", date)
-        .eq("status", "pendente")
-        .order("data_lembrete", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as ChargeNotification[];
+      const [remindersRes, salesRes] = await Promise.all([
+        supabase
+          .from("reminders")
+          .select("*, client:clients(*), sale:sales(*)")
+          .lte("data_lembrete", date)
+          .eq("status", "pendente")
+          .order("data_lembrete", { ascending: true }),
+        supabase
+          .from("sales")
+          .select("*, client:clients(*)")
+          .gt("saldo_restante", 0)
+          .or(`data_vencimento.is.null,data_vencimento.lte.${date}`)
+          .order("data_vencimento", { ascending: true, nullsFirst: false })
+          .order("created_at", { ascending: true }),
+      ]);
+
+      if (remindersRes.error) throw remindersRes.error;
+      if (salesRes.error) throw salesRes.error;
+
+      const reminders = ((remindersRes.data ?? []) as ChargeNotification[]).map((item) => ({
+        ...item,
+        source: "reminder" as const,
+      }));
+      const reminderSaleIds = new Set(reminders.map((item) => item.sale_id).filter(Boolean));
+      const sales = ((salesRes.data ?? []) as RawSale[])
+        .filter((sale) => !reminderSaleIds.has(sale.id))
+        .map((sale) => {
+          const normalizedSale = {
+            ...sale,
+            valor_total: num(sale.valor_total),
+            valor_pago: num(sale.valor_pago),
+            saldo_restante: num(sale.saldo_restante),
+          } as Sale;
+
+          return {
+            id: `sale-${normalizedSale.id}`,
+            client_id: normalizedSale.client_id,
+            sale_id: normalizedSale.id,
+            titulo: "Cobrança da venda",
+            descricao: normalizedSale.descricao,
+            data_lembrete: normalizedSale.data_vencimento ?? normalizedSale.data_venda,
+            horario_lembrete: null,
+            status: "pendente",
+            created_at: normalizedSale.created_at,
+            client: normalizedSale.client ?? null,
+            sale: normalizedSale,
+            source: "sale" as const,
+          } satisfies ChargeNotification;
+        });
+
+      return [...reminders, ...sales].sort((a, b) =>
+        a.data_lembrete.localeCompare(b.data_lembrete),
+      );
     },
   });
 }
