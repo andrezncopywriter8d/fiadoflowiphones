@@ -9,7 +9,7 @@ import { brl } from "@/lib/format";
 import { useDeleteProduct, useProducts, useUpsertProduct, type Product } from "@/hooks/use-data";
 
 export const Route = createFileRoute("/produtos")({
-  head: () => ({ meta: [{ title: "Produtos — Fiado." }] }),
+  head: () => ({ meta: [{ title: "Produtos - Fiado." }] }),
   component: ProductsPage,
 });
 
@@ -24,12 +24,24 @@ const emptyForm = {
 
 const parseNumber = (value: string) => Number(value.replace(",", ".") || 0);
 
+const productErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (
+    message.includes("Could not find the table") ||
+    message.includes("public.products") ||
+    message.includes("products")
+  ) {
+    return "A base de produtos ainda não foi instalada no Supabase. Aplique a migration supabase/migrations/20260513000200_add_products_inventory.sql para ativar cadastro, estoque e baixa automática.";
+  }
+  return message || "Não foi possível carregar os produtos.";
+};
+
 function ProductsPage() {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const { data: products = [], isLoading } = useProducts(deferredSearch);
+  const { data: products = [], isLoading, isError, error, refetch } = useProducts(deferredSearch);
   const upsert = useUpsertProduct();
   const del = useDeleteProduct();
 
@@ -53,6 +65,18 @@ function ProductsPage() {
   const submit = async () => {
     if (!form.nome.trim()) {
       toast.error("Informe o nome do produto");
+      return;
+    }
+    if (isError) {
+      toast.error(productErrorMessage(error));
+      return;
+    }
+    if (parseNumber(form.preco_venda) < 0) {
+      toast.error("Informe um preço válido");
+      return;
+    }
+    if (parseNumber(form.quantidade) < 0) {
+      toast.error("Informe uma quantidade válida");
       return;
     }
 
@@ -181,7 +205,27 @@ function ProductsPage() {
                     </td>
                   </tr>
                 )}
-                {!isLoading && products.length === 0 && (
+                {isError && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center">
+                      <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-warning">
+                        <strong>Cadastro de produtos ainda não está conectado ao banco.</strong>
+                        <p className="text-sm leading-relaxed text-foreground">
+                          {productErrorMessage(error)}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-xl bg-white"
+                          onClick={() => refetch()}
+                        >
+                          Tentar novamente
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && !isError && products.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-10 text-center text-muted-foreground">
                       Nenhum produto cadastrado.
