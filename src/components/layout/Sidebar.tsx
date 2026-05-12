@@ -90,7 +90,7 @@ export function Sidebar() {
           <div className="flex-1">
             <p className="text-[10.5px] text-white/60">Cobranças do mês</p>
             <p className="text-[22px] font-semibold leading-none mt-0.5">
-              {dash?.totals.cobrancasHoje ?? 0 + (dash?.overdueSales?.length ?? 0) || 0}
+              {(dash?.totals.cobrancasHoje ?? 0) + (dash?.overdueSales?.length ?? 0)}
             </p>
           </div>
         </div>
