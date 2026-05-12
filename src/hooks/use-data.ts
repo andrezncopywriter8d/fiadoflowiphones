@@ -155,6 +155,67 @@ const normalizeProduct = (p: RawProduct): Product => ({
   preco_venda: num(p.preco_venda),
 });
 
+const isProductSchemaError = (error: unknown) => {
+  const value = error as { code?: string; message?: string } | null;
+  const message = value?.message ?? String(error ?? "");
+  return (
+    value?.code === "PGRST205" ||
+    message.includes("public.products") ||
+    message.includes("public.sale_items") ||
+    message.includes("Could not find the table")
+  );
+};
+
+const localProductKey = (userId: string) => `fiado:products:${userId}`;
+
+const readLocalProducts = (userId: string, search?: string) => {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(localProductKey(userId));
+  const products = raw ? (JSON.parse(raw) as RawProduct[]) : [];
+  const normalized = products
+    .map(normalizeProduct)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const term = search?.trim().toLowerCase();
+  if (!term) return normalized;
+  return normalized.filter(
+    (product) =>
+      product.nome.toLowerCase().includes(term) || (product.sku ?? "").toLowerCase().includes(term),
+  );
+};
+
+const writeLocalProducts = (userId: string, products: Product[]) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(localProductKey(userId), JSON.stringify(products));
+};
+
+const saveLocalProduct = (
+  userId: string,
+  payload: Partial<Product> & { id?: string; nome: string },
+) => {
+  const now = new Date().toISOString();
+  const products = readLocalProducts(userId);
+  const existing = payload.id ? products.find((product) => product.id === payload.id) : null;
+  const saved: Product = {
+    id: payload.id ?? crypto.randomUUID(),
+    nome: payload.nome,
+    sku: payload.sku ?? null,
+    preco_venda: num(payload.preco_venda),
+    quantidade: Number(payload.quantidade ?? 0),
+    estoque_minimo: Number(payload.estoque_minimo ?? 0),
+    status: payload.status ?? "ativo",
+    observacoes: payload.observacoes ?? null,
+    created_at: existing?.created_at ?? now,
+    updated_at: now,
+  };
+  writeLocalProducts(
+    userId,
+    existing
+      ? products.map((product) => (product.id === saved.id ? saved : product))
+      : [saved, ...products],
+  );
+  return saved;
+};
+
 const normalizeSaleItem = (item: RawSaleItem): SaleItem => ({
   ...item,
   preco_unitario: num(item.preco_unitario),
@@ -272,7 +333,10 @@ export function useProducts(search?: string) {
       let q = supabase.from("products").select("*").order("created_at", { ascending: false });
       if (search) q = q.or(`nome.ilike.%${search}%,sku.ilike.%${search}%`);
       const { data, error } = await q;
-      if (error) throw error;
+      if (error) {
+        if (isProductSchemaError(error)) return readLocalProducts(user.id, search);
+        throw error;
+      }
       return ((data ?? []) as RawProduct[]).map(normalizeProduct);
     },
   });
@@ -292,7 +356,10 @@ export function useUpsertProduct() {
           .eq("id", id)
           .select()
           .maybeSingle();
-        if (error) throw error;
+        if (error) {
+          if (isProductSchemaError(error)) return saveLocalProduct(user.id, payload);
+          throw error;
+        }
         return data ? normalizeProduct(data as RawProduct) : null;
       }
       const { data, error } = await supabase
@@ -300,7 +367,10 @@ export function useUpsertProduct() {
         .insert({ ...rest, user_id: user.id })
         .select()
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        if (isProductSchemaError(error)) return saveLocalProduct(user.id, payload);
+        throw error;
+      }
       return data ? normalizeProduct(data as RawProduct) : null;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["products"] }),
@@ -309,10 +379,20 @@ export function useUpsertProduct() {
 
 export function useDeleteProduct() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("products").delete().eq("id", id);
-      if (error) throw error;
+      if (error) {
+        if (user && isProductSchemaError(error)) {
+          writeLocalProducts(
+            user.id,
+            readLocalProducts(user.id).filter((product) => product.id !== id),
+          );
+          return;
+        }
+        throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["products"] }),
   });

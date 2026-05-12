@@ -25,13 +25,19 @@ const emptyForm = {
 const parseNumber = (value: string) => Number(value.replace(",", ".") || 0);
 
 const productErrorMessage = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error ?? "");
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error && "message" in error
+        ? String((error as { message?: unknown }).message)
+        : String(error ?? "");
   if (
+    (typeof error === "object" && error && "code" in error && error.code === "PGRST205") ||
     message.includes("Could not find the table") ||
     message.includes("public.products") ||
     message.includes("products")
   ) {
-    return "A base de produtos ainda não foi instalada no Supabase. Aplique a migration supabase/migrations/20260513000200_add_products_inventory.sql para ativar cadastro, estoque e baixa automática.";
+    return "A tabela de produtos ainda não existe no Supabase. Por enquanto, o app salva os produtos neste navegador; para salvar na nuvem, aplique a migration supabase/migrations/20260513000200_add_products_inventory.sql.";
   }
   return message || "Não foi possível carregar os produtos.";
 };
