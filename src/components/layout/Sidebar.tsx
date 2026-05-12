@@ -34,10 +34,10 @@ export function Sidebar() {
   const overdueCount = dash?.overdueSales?.length ?? 0;
 
   return (
-    <aside className="hidden md:flex md:w-[268px] shrink-0 flex-col gap-5 bg-surface p-5 rounded-l-[28px]">
+    <aside className="hidden shrink-0 flex-col gap-5 rounded-l-[28px] bg-surface p-5 md:flex md:w-[268px]">
       <div className="flex items-center gap-3 px-1 pt-1">
-        <div className="relative h-9 w-9 rounded-full bg-primary grid place-items-center shadow-soft">
-          <span className="text-primary-foreground text-sm font-semibold">F</span>
+        <div className="relative grid h-9 w-9 place-items-center rounded-full bg-primary shadow-soft">
+          <span className="text-sm font-semibold text-primary-foreground">F</span>
           <span className="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-surface" />
         </div>
         <span className="text-[14px] font-semibold tracking-tight text-foreground/85">
@@ -46,7 +46,7 @@ export function Sidebar() {
       </div>
 
       <div className="px-1">
-        <h2 className="text-[26px] leading-[1.1] font-semibold text-foreground tracking-tight">
+        <h2 className="text-[26px] leading-[1.1] font-semibold tracking-tight text-foreground">
           Bem-vindo
           <br />
           de volta
@@ -56,7 +56,7 @@ export function Sidebar() {
         <p className="mt-3 text-[11px] text-muted-foreground">Última atualização: hoje</p>
       </div>
 
-      <nav className="rounded-2xl bg-surface-muted p-2 flex flex-col gap-0.5">
+      <nav className="flex flex-col gap-0.5 rounded-2xl bg-surface-muted p-2">
         {items.map((item) => {
           const active = pathname === item.to;
           const Icon = item.icon;
@@ -75,7 +75,7 @@ export function Sidebar() {
               <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} />
               <span className="flex-1">{item.label}</span>
               {showBadge && (
-                <span className="text-[10px] font-semibold rounded-full bg-destructive text-destructive-foreground px-1.5 py-0.5">
+                <span className="rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-destructive-foreground">
                   {overdueCount}
                 </span>
               )}
@@ -84,14 +84,14 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-auto rounded-2xl bg-ink text-ink-foreground p-4">
+      <div className="mt-auto rounded-2xl bg-ink p-4 text-ink-foreground">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-white/10 grid place-items-center">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-white/10">
             <BellRing className="h-5 w-5" strokeWidth={1.8} />
           </div>
           <div className="flex-1">
             <p className="text-[10.5px] text-white/60">Cobranças do mês</p>
-            <p className="text-[22px] font-semibold leading-none mt-0.5">
+            <p className="mt-0.5 text-[22px] leading-none font-semibold">
               {(dash?.totals.cobrancasHoje ?? 0) + (dash?.overdueSales?.length ?? 0)}
             </p>
           </div>
@@ -100,7 +100,7 @@ export function Sidebar() {
         <Link
           to="/cobrancas"
           preload="intent"
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white text-ink px-4 py-2.5 text-[12px] font-medium hover:opacity-95 transition"
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12px] font-medium text-ink transition hover:opacity-95"
         >
           Ver cobranças <ArrowRight className="h-3.5 w-3.5" />
         </Link>

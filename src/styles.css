@@ -172,6 +172,7 @@
   body {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
     text-rendering: optimizeLegibility;
   }
 
@@ -190,6 +191,14 @@
   .contain-content {
     content-visibility: auto;
     contain-intrinsic-size: 760px;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   .route-transition {
