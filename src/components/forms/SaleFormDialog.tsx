@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 
 const fieldClass =
-  "h-11 rounded-xl border-border/80 bg-white px-3 text-sm shadow-none transition focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0";
+  "h-11 min-w-0 rounded-xl border-border/80 bg-white px-3 text-sm shadow-none transition focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0";
 
 const textAreaClass =
   "min-h-[84px] rounded-xl border-border/80 bg-white px-3 py-2 text-sm shadow-none transition focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0";
@@ -671,7 +671,7 @@ export function SaleFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto border-white/70 bg-surface p-0 shadow-float sm:max-w-[560px] sm:rounded-2xl">
+      <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[560px] sm:rounded-2xl">
         <DialogHeader className="border-b border-border/70 px-5 pb-4 pt-5 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <ReceiptText className="h-5 w-5" />

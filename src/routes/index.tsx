@@ -2,7 +2,21 @@ import { createFileRoute, Link, Navigate, useRouterState } from "@tanstack/react
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, LogOut } from "lucide-react";
+import {
+  BarChart3,
+  BellRing,
+  ChevronDown,
+  CircleDot,
+  LayoutGrid,
+  Loader2,
+  LogOut,
+  Package,
+  Settings,
+  ShoppingBag,
+  Sparkles,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useDashboard, useProfile } from "@/hooks/use-data";
 import { SaleFormDialog } from "@/components/forms/SaleFormDialog";
@@ -24,13 +38,13 @@ export const Route = createFileRoute("/")({
 });
 
 const menuItems = [
-  { label: "Overview", icon: "▦", to: "/" as const },
-  { label: "Clientes", icon: "○", to: "/clientes" as const },
-  { label: "Produtos", icon: "□", to: "/produtos" as const },
-  { label: "Vendas", icon: "▣", to: "/vendas" as const },
-  { label: "Pagamentos", icon: "▭", to: "/pagamentos" as const },
-  { label: "Cobranças", icon: "♧", to: "/cobrancas" as const },
-  { label: "Relatórios", icon: "▥", to: "/relatorios" as const },
+  { label: "Overview", icon: LayoutGrid, to: "/" as const },
+  { label: "Clientes", icon: Users, to: "/clientes" as const },
+  { label: "Produtos", icon: Package, to: "/produtos" as const },
+  { label: "Vendas", icon: ShoppingBag, to: "/vendas" as const },
+  { label: "Pagamentos", icon: Wallet, to: "/pagamentos" as const },
+  { label: "Cobranças", icon: BellRing, to: "/cobrancas" as const },
+  { label: "Relatórios", icon: BarChart3, to: "/relatorios" as const },
 ];
 
 const navItems = [
@@ -154,9 +168,12 @@ function Dashboard() {
           <nav className="side-nav">
             {menuItems.map((item) => {
               const active = pathname === item.to;
+              const Icon = item.icon;
               return (
                 <Link key={item.to} to={item.to} className={`side-item ${active ? "active" : ""}`}>
-                  <span className="side-icon">{item.icon}</span>
+                  <span className="side-icon">
+                    <Icon size={16} strokeWidth={1.8} />
+                  </span>
                   {item.label}
                 </Link>
               );
@@ -164,16 +181,18 @@ function Dashboard() {
           </nav>
 
           <div className="sidebar-actions">
-            <button className="round-btn">⌄</button>
-            <Link
-              to="/configuracoes"
-              className="round-btn"
-              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-            >
-              ⚙
+            <button className="round-btn" aria-label="Recolher">
+              <ChevronDown size={16} />
+            </button>
+            <Link to="/configuracoes" className="round-btn" aria-label="Configurações">
+              <Settings size={16} />
             </Link>
-            <button className="round-btn dark">✣</button>
-            <button className="round-btn active">◇</button>
+            <button className="round-btn dark" aria-label="Destaques">
+              <Sparkles size={20} />
+            </button>
+            <button className="round-btn active" aria-label="Ativo">
+              <CircleDot size={18} />
+            </button>
           </div>
 
           <div className="avatar-card">

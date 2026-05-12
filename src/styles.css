@@ -201,6 +201,16 @@
     display: none;
   }
 
+  .clean-scrollbar {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: none;
+  }
+
+  .clean-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
   .route-transition {
     min-height: 100vh;
     animation: route-slide-in 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
