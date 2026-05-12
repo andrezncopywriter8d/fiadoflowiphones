@@ -1,13 +1,28 @@
 import { BellRing, ArrowUpRight, MessageCircle, Phone, Send } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { Link } from "@tanstack/react-router";
 import { RevenueChart } from "./RevenueChart";
-
-const gaugeData = [
-  { name: "open", value: 48 },
-  { name: "rest", value: 52 },
-];
+import { useDashboard } from "@/hooks/use-data";
+import { brl } from "@/lib/format";
 
 export function SecondRow() {
+  const { data: dash } = useDashboard();
+  const totals = dash?.totals;
+
+  const aberto = totals?.totalAberto ?? 0;
+  const vendido = totals?.totalVendido ?? 0;
+  const pct = vendido > 0 ? Math.min(100, Math.round((aberto / vendido) * 100)) : 0;
+  const valorMedio =
+    (dash?.topDebtors?.length ?? 0) > 0
+      ? aberto / (dash?.topDebtors?.length ?? 1)
+      : 0;
+
+  const gaugeData = [
+    { name: "open", value: pct },
+    { name: "rest", value: Math.max(1, 100 - pct) },
+  ];
+  const cobrancasHoje = totals?.cobrancasHoje ?? 0;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
       {/* Cobranças de hoje */}
@@ -20,26 +35,27 @@ export function SecondRow() {
             Prioridade
           </span>
         </div>
-        <h3 className="mt-4 text-[15px] font-semibold text-foreground">
-          Cobranças de hoje
-        </h3>
+        <h3 className="mt-4 text-[15px] font-semibold text-foreground">Cobranças de hoje</h3>
         <p className="text-[11px] text-muted-foreground mt-1">
-          12 clientes aguardando contato
+          {cobrancasHoje} {cobrancasHoje === 1 ? "cliente aguardando" : "clientes aguardando"} contato
         </p>
         <div className="flex items-center gap-2 mt-4">
-          <button className="h-8 w-8 rounded-full bg-surface-muted grid place-items-center text-foreground/70 hover:text-success transition">
+          <div className="h-8 w-8 rounded-full bg-surface-muted grid place-items-center text-foreground/70">
             <MessageCircle className="h-3.5 w-3.5" />
-          </button>
-          <button className="h-8 w-8 rounded-full bg-surface-muted grid place-items-center text-foreground/70 hover:text-primary transition">
+          </div>
+          <div className="h-8 w-8 rounded-full bg-surface-muted grid place-items-center text-foreground/70">
             <Phone className="h-3.5 w-3.5" />
-          </button>
-          <button className="h-8 w-8 rounded-full bg-surface-muted grid place-items-center text-foreground/70 hover:text-primary transition">
+          </div>
+          <div className="h-8 w-8 rounded-full bg-surface-muted grid place-items-center text-foreground/70">
             <Send className="h-3.5 w-3.5" />
-          </button>
+          </div>
         </div>
-        <button className="mt-auto pt-4 inline-flex items-center gap-1.5 text-[11px] font-medium text-primary hover:opacity-80">
+        <Link
+          to="/cobrancas"
+          className="mt-auto pt-4 inline-flex items-center gap-1.5 text-[11px] font-medium text-primary hover:opacity-80"
+        >
           Ver todas <ArrowUpRight className="h-3 w-3" />
-        </button>
+        </Link>
       </div>
 
       {/* Pendências gauge */}
@@ -47,12 +63,10 @@ export function SecondRow() {
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-[15px] font-semibold text-foreground">Pendências</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Em aberto
-            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Em aberto</p>
           </div>
           <span className="rounded-full bg-success/15 text-success text-[10px] font-semibold px-2.5 py-1">
-            48%
+            {pct}%
           </span>
         </div>
         <div className="relative h-[140px] mt-2">
@@ -76,8 +90,8 @@ export function SecondRow() {
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
-            <p className="text-[22px] font-semibold tracking-tight text-foreground">
-              R$ 594
+            <p className="text-[20px] font-semibold tracking-tight text-foreground">
+              {brl(valorMedio)}
             </p>
             <p className="text-[10px] text-muted-foreground">Valor médio em aberto</p>
           </div>
