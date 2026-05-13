@@ -24,6 +24,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Smartphone,
   Trash2,
   TrendingUp,
@@ -64,6 +65,7 @@ type TabId =
   | "cobrancas"
   | "estoque"
   | "relatorios"
+  | "ia"
   | "configuracoes";
 
 type PhoneStatus =
@@ -201,6 +203,22 @@ type LoanInstallment = {
   status: "pendente" | "pago" | "vencido";
 };
 
+type AiCatalogPart = {
+  tipo: string;
+  modelo: string;
+  qualidade: string;
+  fornecedor: string;
+  custo: number;
+  preco: number;
+  precoInstalado: number;
+  quantidade: number;
+  minimo: number;
+  localizacao: string;
+  garantia: number;
+  observacoes?: string;
+  precisaRevisao?: boolean;
+};
+
 type Payment = {
   id: number;
   cliente: string;
@@ -276,6 +294,7 @@ const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "cobrancas", label: "Cobranças", icon: BellRing },
   { id: "estoque", label: "Estoque", icon: Boxes },
   { id: "relatorios", label: "Relatórios", icon: BarChart3 },
+  { id: "ia", label: "IA", icon: Sparkles },
   { id: "configuracoes", label: "Configurações", icon: Settings },
 ];
 
@@ -446,6 +465,17 @@ const partTypes = [
   "Suporte de câmera",
   "Grade auricular",
   "Malha de alto-falante",
+];
+
+const partQualityOptions = [
+  "Original Apple",
+  "Original retirada",
+  "Premium",
+  "OLED",
+  "Incell",
+  "Nacional",
+  "Paralela",
+  "Recondicionada",
 ];
 
 const serviceTypes = [
@@ -805,6 +835,12 @@ function LojaDeIphonePage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [aiMode, setAiMode] = useState<"duvida" | "catalogo">("catalogo");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiAnswer, setAiAnswer] = useState("");
+  const [aiQuestions, setAiQuestions] = useState<string[]>([]);
+  const [aiDraftParts, setAiDraftParts] = useState<AiCatalogPart[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
   const [newClient, setNewClient] = useState({
     nome: "",
     tipo: "B2C" as Client["tipo"],
@@ -1140,6 +1176,12 @@ function LojaDeIphonePage() {
     if (active === "emprestimos") {
       focusSection("iphone-loan-form");
       toast.success("Registro de emprestimo pronto para preencher");
+      return;
+    }
+
+    if (active === "ia") {
+      focusSection("iphone-ai-assistant");
+      toast.success("IA pronta para receber sua lista ou duvida");
     }
   }
 
@@ -1485,6 +1527,109 @@ function LojaDeIphonePage() {
     setClients((items) => [...imported, ...items]);
     setClientListText("");
     toast.success(`${imported.length} clientes importados`);
+  }
+
+  async function runFiadoAI() {
+    if (!aiPrompt.trim()) {
+      toast.error("Escreva sua duvida ou cole a lista de pecas");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiQuestions([]);
+    setAiAnswer("");
+    setAiDraftParts([]);
+
+    const systemPrompt = `Voce e a IA interna do SaaS Fiado para loja de iPhones. Responda em JSON puro.
+Formato obrigatorio:
+{
+  "answer": "resposta curta em portugues",
+  "questions": ["perguntas objetivas se faltar dado"],
+  "parts": [{
+    "tipo": "tipo de peca",
+    "modelo": "modelo de iPhone compativel",
+    "qualidade": "Original Apple | Original retirada | Premium | OLED | Incell | Nacional | Paralela | Recondicionada",
+    "fornecedor": "fornecedor ou vazio",
+    "custo": 0,
+    "preco": 0,
+    "precoInstalado": 0,
+    "quantidade": 1,
+    "minimo": 1,
+    "localizacao": "gaveta/caixa/prateleira ou vazio",
+    "garantia": 30,
+    "observacoes": "detalhes",
+    "precisaRevisao": true
+  }]
+}
+Se o modo for catalogo, extraia pecas de listas soltas e marque precisaRevisao quando faltar preco, modelo, qualidade ou quantidade. Se for duvida, responda e deixe parts vazio.`;
+
+    try {
+      const response = await fetch("https://text.pollinations.ai/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "openai-fast",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: `Modo: ${aiMode}. Contexto do estoque atual: ${parts.length} pecas, ${phones.length} celulares. Pedido: ${aiPrompt}`,
+            },
+          ],
+          temperature: 0.2,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`AI status ${response.status}`);
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content ?? "";
+      const parsed = parseAiJson(content);
+      const fallbackParts = aiMode === "catalogo" ? parseCatalogText(aiPrompt) : [];
+      const partsFromAI = sanitizeAiParts(parsed.parts?.length ? parsed.parts : fallbackParts);
+      setAiAnswer(parsed.answer || localAiAnswer(aiMode, partsFromAI.length));
+      setAiQuestions(parsed.questions ?? buildAiQuestions(partsFromAI));
+      setAiDraftParts(partsFromAI);
+      toast.success("IA processou o pedido");
+    } catch {
+      const fallbackParts =
+        aiMode === "catalogo" ? sanitizeAiParts(parseCatalogText(aiPrompt)) : [];
+      setAiAnswer(localAiAnswer(aiMode, fallbackParts.length));
+      setAiQuestions(buildAiQuestions(fallbackParts));
+      setAiDraftParts(fallbackParts);
+      toast.success("IA local preparou uma revisao sem depender do seu PC");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function importAiDraftParts() {
+    if (!aiDraftParts.length) {
+      toast.error("Nenhum item de catalogo para importar");
+      return;
+    }
+
+    const now = Date.now();
+    const imported: Part[] = aiDraftParts.map((part, index) => ({
+      id: now + index,
+      tipo: part.tipo,
+      modelo: part.modelo,
+      qualidade: part.qualidade,
+      sku: `AI-${String(now).slice(-5)}-${index + 1}`,
+      fornecedor: part.fornecedor,
+      custo: part.custo,
+      preco: part.preco,
+      precoInstalado: part.precoInstalado,
+      quantidade: part.quantidade,
+      minimo: part.minimo,
+      localizacao: part.localizacao,
+      garantia: part.garantia,
+      status: stockStatus(part.quantidade, part.minimo),
+    }));
+
+    setParts((items) => [...imported, ...items]);
+    setAiDraftParts([]);
+    resetFilters("estoque");
+    toast.success(`${imported.length} itens adicionados ao estoque`);
   }
 
   function addSale() {
@@ -1880,27 +2025,30 @@ function LojaDeIphonePage() {
               />
             )}
 
-            {active !== "dashboard" && active !== "configuracoes" && active !== "relatorios" && (
-              <Filters
-                query={query}
-                status={statusFilter}
-                category={categoryFilter}
-                onQuery={setQuery}
-                onStatus={setStatusFilter}
-                onCategory={setCategoryFilter}
-                categories={
-                  active === "pecas"
-                    ? partTypes.slice(0, 18)
-                    : active === "vendas"
-                      ? ["Celular", "Peça", "Serviço", "Combo"]
-                      : active === "clientes"
-                        ? ["B2C", "B2B"]
-                        : active === "emprestimos"
-                          ? ["Peça"]
-                          : []
-                }
-              />
-            )}
+            {active !== "dashboard" &&
+              active !== "configuracoes" &&
+              active !== "relatorios" &&
+              active !== "ia" && (
+                <Filters
+                  query={query}
+                  status={statusFilter}
+                  category={categoryFilter}
+                  onQuery={setQuery}
+                  onStatus={setStatusFilter}
+                  onCategory={setCategoryFilter}
+                  categories={
+                    active === "pecas"
+                      ? partTypes.slice(0, 18)
+                      : active === "vendas"
+                        ? ["Celular", "Peça", "Serviço", "Combo"]
+                        : active === "clientes"
+                          ? ["B2C", "B2B"]
+                          : active === "emprestimos"
+                            ? ["Peça"]
+                            : []
+                  }
+                />
+              )}
 
             {stockProductOpen && (
               <StockProductFormCard
@@ -2671,6 +2819,109 @@ function LojaDeIphonePage() {
                 services={services}
                 totals={totals}
               />
+            )}
+            {active === "ia" && (
+              <>
+                <ModuleCard
+                  id="iphone-ai-assistant"
+                  title="IA Fiado"
+                  icon={Sparkles}
+                  action={
+                    <Button onClick={runFiadoAI} disabled={aiLoading}>
+                      {aiLoading ? "Processando..." : "Executar IA"}
+                    </Button>
+                  }
+                >
+                  <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
+                    {[
+                      { id: "catalogo", label: "Preencher catalogo" },
+                      { id: "duvida", label: "Tirar duvida" },
+                    ].map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setAiMode(option.id as typeof aiMode)}
+                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                          aiMode === option.id
+                            ? "bg-primary text-primary-foreground shadow-soft"
+                            : "bg-surface text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea
+                    className="min-h-40 rounded-[22px]"
+                    placeholder={
+                      aiMode === "catalogo"
+                        ? "Cole sua lista: 10 bateria iPhone 11 premium custo 55 venda 120 fornecedor Pedro..."
+                        : "Pergunte algo sobre estoque, cobranca, lucro, fiado, cadastro ou assistencia..."
+                    }
+                    value={aiPrompt}
+                    onChange={(event) => setAiPrompt(event.target.value)}
+                  />
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Usa API gratuita online quando disponivel e fallback local. No deploy, funciona
+                    sem seu PC ligado.
+                  </p>
+                </ModuleCard>
+
+                {(aiAnswer || aiQuestions.length > 0) && (
+                  <DataCard title="Resposta da IA">
+                    <div className="space-y-3 text-sm">
+                      {aiAnswer && <p className="text-foreground">{aiAnswer}</p>}
+                      {aiQuestions.length > 0 && (
+                        <div className="rounded-[20px] border border-warning/25 bg-warning/10 p-4">
+                          <p className="font-semibold text-foreground">
+                            A IA ficou em duvida sobre:
+                          </p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+                            {aiQuestions.map((question) => (
+                              <li key={question}>{question}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </DataCard>
+                )}
+
+                {aiDraftParts.length > 0 && (
+                  <DataCard title="Catalogo pronto para revisar">
+                    <div className="mb-4 flex justify-end">
+                      <Button onClick={importAiDraftParts}>Adicionar ao estoque</Button>
+                    </div>
+                    <ResponsiveTable
+                      columns={[
+                        "Peca",
+                        "Qualidade",
+                        "Fornecedor",
+                        "Custo",
+                        "Venda",
+                        "Qtd.",
+                        "Revisao",
+                      ]}
+                      rows={aiDraftParts.map((part) => [
+                        <ItemTitle
+                          key="item"
+                          title={`${part.tipo} ${part.modelo}`}
+                          subtitle={part.localizacao || "Sem localizacao"}
+                        />,
+                        part.qualidade,
+                        part.fornecedor || "A definir",
+                        brl(part.custo),
+                        brl(part.preco),
+                        String(part.quantidade),
+                        <StatusPill
+                          key="review"
+                          status={part.precisaRevisao ? "Parcial" : "Ativo"}
+                        />,
+                      ])}
+                    />
+                  </DataCard>
+                )}
+              </>
             )}
             {active === "configuracoes" && <SettingsView />}
           </div>
@@ -3649,6 +3900,7 @@ function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => voi
     cobrancas: "Cobranças de hoje, vencidas e próximas com mensagem pronta para WhatsApp.",
     estoque: "Visão de aparelhos, peças, acessórios, movimentação e lucro potencial.",
     relatorios: "Faturamento, margem, ranking de peças, modelos, serviços e inadimplência.",
+    ia: "Assistente para duvidas e preenchimento automatico do catalogo de estoque.",
     configuracoes: "Preferências da V2 para loja de iPhones e assistência técnica.",
   };
   const button: Partial<Record<TabId, string>> = {
@@ -3659,6 +3911,7 @@ function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => voi
     vendas: "+ Nova venda",
     emprestimos: "+ Novo emprestimo",
     estoque: "+ Adicionar item",
+    ia: "+ Usar IA",
   };
   return (
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -4115,6 +4368,149 @@ function stockStatus(quantity: number, minQuantity: number) {
         ? "Baixo estoque"
         : "Disponível"
   ) as Part["status"];
+}
+
+function parseAiJson(content: string): {
+  answer?: string;
+  questions?: string[];
+  parts?: AiCatalogPart[];
+} {
+  const clean = content
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  if (start === -1 || end === -1) return {};
+
+  try {
+    return JSON.parse(clean.slice(start, end + 1));
+  } catch {
+    return {};
+  }
+}
+
+function sanitizeAiParts(parts: AiCatalogPart[]) {
+  return parts
+    .filter((part) => part.tipo || part.modelo)
+    .map((part) => {
+      const quantity = Math.max(1, Number(part.quantidade) || 1);
+      const cost = Math.max(0, Number(part.custo) || 0);
+      const price = Math.max(0, Number(part.preco) || 0);
+      const installedPrice = Math.max(price, Number(part.precoInstalado) || price);
+      const minimum = Math.max(0, Number(part.minimo) || 1);
+      const quality = partQualityOptions.includes(part.qualidade) ? part.qualidade : "Premium";
+      const normalizedType = normalizeSearch(part.tipo);
+      const type =
+        partTypes.find((item) => normalizeSearch(item) === normalizedType) ||
+        partTypes.find((item) => normalizedType.includes(normalizeSearch(item))) ||
+        part.tipo ||
+        "Peca";
+      const model =
+        iphoneModels.find((item) => normalizeSearch(part.modelo).includes(normalizeSearch(item))) ||
+        part.modelo ||
+        "Modelo a confirmar";
+
+      return {
+        tipo: type,
+        modelo: model,
+        qualidade: quality,
+        fornecedor: part.fornecedor || "",
+        custo: cost,
+        preco: price,
+        precoInstalado: installedPrice,
+        quantidade: quantity,
+        minimo: minimum,
+        localizacao: part.localizacao || "",
+        garantia: Math.max(0, Number(part.garantia) || 30),
+        observacoes: part.observacoes || "",
+        precisaRevisao:
+          Boolean(part.precisaRevisao) ||
+          !part.modelo ||
+          !part.tipo ||
+          !part.quantidade ||
+          !part.preco ||
+          !part.qualidade,
+      };
+    });
+}
+
+function parseCatalogText(text: string): AiCatalogPart[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const normalized = normalizeSearch(line);
+      const quantityMatch = line.match(/(?:^|\s)(\d+)\s*(?:un|und|unidades|x)?/i);
+      const moneyMatches = [...line.matchAll(/(?:r\$)?\s*(\d+(?:[.,]\d{1,2})?)/gi)]
+        .map((match) => Number(match[1].replace(",", ".")))
+        .filter((value) => value > 0);
+      const type =
+        partTypes.find((item) => normalized.includes(normalizeSearch(item))) ||
+        (normalized.includes("tela") ? "Tela frontal" : "") ||
+        (normalized.includes("bateria") ? "Bateria" : "") ||
+        "Peca";
+      const model =
+        iphoneModels.find((item) => normalized.includes(normalizeSearch(item))) ||
+        "Modelo a confirmar";
+      const quality =
+        partQualityOptions.find((item) => normalized.includes(normalizeSearch(item))) ||
+        (normalized.includes("incell") ? "Incell" : "") ||
+        (normalized.includes("oled") ? "OLED" : "") ||
+        "Premium";
+      const quantity = quantityMatch ? Math.max(1, Number(quantityMatch[1])) : 1;
+      const cost = moneyMatches.length >= 2 ? moneyMatches[0] : 0;
+      const price = moneyMatches.length >= 2 ? moneyMatches[1] : moneyMatches[0] || 0;
+
+      return {
+        tipo: type,
+        modelo: model,
+        qualidade: quality,
+        fornecedor: "",
+        custo: cost,
+        preco: price,
+        precoInstalado: price,
+        quantidade: quantity,
+        minimo: 1,
+        localizacao: "",
+        garantia: 30,
+        observacoes: line,
+        precisaRevisao: model === "Modelo a confirmar" || price <= 0,
+      };
+    });
+}
+
+function buildAiQuestions(parts: AiCatalogPart[]) {
+  const questions = new Set<string>();
+  for (const part of parts) {
+    if (!part.modelo || part.modelo === "Modelo a confirmar") {
+      questions.add("Qual modelo de iPhone cada peca atende?");
+    }
+    if (!part.preco) questions.add("Qual preco de venda devo colocar nos itens sem preco?");
+    if (!part.fornecedor) questions.add("Deseja informar fornecedor para estes itens?");
+    if (!part.localizacao)
+      questions.add("Onde esses itens ficam no estoque: gaveta, caixa ou prateleira?");
+  }
+  return [...questions];
+}
+
+function localAiAnswer(mode: "duvida" | "catalogo", count: number) {
+  if (mode === "duvida") {
+    return "Posso ajudar com estoque, vendas fiadas, cobrancas, clientes B2B/B2C, lucro e cadastro. Escreva sua pergunta com o contexto da loja.";
+  }
+  return count
+    ? `Preparei ${count} itens para revisao antes de adicionar ao estoque.`
+    : "Nao consegui identificar itens de estoque. Cole uma lista com tipo, modelo, quantidade e preco.";
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function onlyDigits(value: string) {
