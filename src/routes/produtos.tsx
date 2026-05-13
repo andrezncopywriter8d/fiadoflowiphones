@@ -134,6 +134,10 @@ const emptyForm = {
 
 const parseNumber = (value: string) => Number(value.replace(",", ".") || 0);
 const parseInteger = (value: string) => Math.max(0, Math.floor(parseNumber(value)));
+const softFieldClass =
+  "h-10 rounded-xl border-border/80 bg-surface shadow-sm shadow-foreground/5 focus:ring-2 focus:ring-primary/15";
+const softSectionClass =
+  "grid gap-3 rounded-2xl border border-border/70 bg-surface p-4 shadow-sm shadow-foreground/5";
 const marginPercent = (costValue: string, saleValue: string) => {
   const cost = parseNumber(costValue);
   const sale = parseNumber(saleValue);
@@ -541,12 +545,12 @@ function ProductsPage() {
           </DialogHeader>
 
           <div className="grid gap-5 px-5 py-5 sm:px-6">
-            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+            <div className={softSectionClass}>
               <h2 className="text-sm font-semibold text-foreground">Dados gerais</h2>
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="Categoria *">
                   <Select value={form.categoria} onValueChange={updateCategory}>
-                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                    <SelectTrigger className={softFieldClass}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -563,7 +567,7 @@ function ProductsPage() {
                     value={form.marca || undefined}
                     onValueChange={(marca) => setForm({ ...form, marca })}
                   >
-                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                    <SelectTrigger className={softFieldClass}>
                       <SelectValue placeholder="Selecionar marca" />
                     </SelectTrigger>
                     <SelectContent>
@@ -581,7 +585,7 @@ function ProductsPage() {
                       value={form.tipoPeca || undefined}
                       onValueChange={(tipoPeca) => updatePreset({ tipoPeca })}
                     >
-                      <SelectTrigger className="h-10 rounded-xl bg-background">
+                      <SelectTrigger className={softFieldClass}>
                         <SelectValue placeholder="Selecionar peça" />
                       </SelectTrigger>
                       <SelectContent>
@@ -605,7 +609,7 @@ function ProductsPage() {
                       value={form.modelo || undefined}
                       onValueChange={(modelo) => updatePreset({ modelo })}
                     >
-                      <SelectTrigger className="h-10 rounded-xl bg-background">
+                      <SelectTrigger className={softFieldClass}>
                         <SelectValue placeholder="Selecionar modelo" />
                       </SelectTrigger>
                       <SelectContent>
@@ -625,7 +629,7 @@ function ProductsPage() {
                     value={form.modelo || undefined}
                     onValueChange={(modelo) => updatePreset({ modelo })}
                   >
-                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                    <SelectTrigger className={softFieldClass}>
                       <SelectValue placeholder="Selecionar acessório" />
                     </SelectTrigger>
                     <SelectContent>
@@ -653,7 +657,7 @@ function ProductsPage() {
                     value={form.status}
                     onValueChange={(status) => setForm({ ...form, status })}
                   >
-                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                    <SelectTrigger className={softFieldClass}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -684,7 +688,7 @@ function ProductsPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+            <div className={softSectionClass}>
               <h2 className="text-sm font-semibold text-foreground">Preço e margem</h2>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <Field label="Custo unitário (R$)">
@@ -720,7 +724,7 @@ function ProductsPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+            <div className={softSectionClass}>
               <h2 className="text-sm font-semibold text-foreground">Estoque e fornecedor</h2>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <Field label="Quantidade em estoque">
@@ -764,18 +768,18 @@ function ProductsPage() {
               </Field>
             </div>
 
-            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+            <div className={softSectionClass}>
               <h2 className="text-sm font-semibold text-foreground">Observações</h2>
               <Textarea
                 value={form.observacoes}
                 onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
                 placeholder="Detalhes do produto, condição, variações, combinado com fornecedor..."
-                className="min-h-[96px] rounded-xl bg-background"
+                className="min-h-[96px] rounded-xl bg-surface"
               />
             </div>
           </div>
 
-          <DialogFooter className="gap-2 border-t border-border/70 bg-surface-muted/60 px-5 py-4 sm:px-6">
+          <DialogFooter className="gap-2 border-t border-border/70 bg-surface px-5 py-4 sm:px-6">
             <Button variant="ghost" className="h-11 rounded-xl px-5" onClick={reset}>
               Cancelar
             </Button>
