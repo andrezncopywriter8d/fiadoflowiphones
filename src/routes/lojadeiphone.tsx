@@ -172,6 +172,19 @@ type Sale = {
   vencimento: string;
   status: SaleStatus;
   lucro: number;
+  modalidade?: "avista" | "fiado" | "emprestimo";
+  jurosMensal?: number;
+  diaCobranca?: number;
+  totalProgramado?: number;
+  parcelasAgenda?: LoanInstallment[];
+};
+
+type LoanInstallment = {
+  id: number;
+  numero: number;
+  vencimento: string;
+  valor: number;
+  status: "pendente" | "pago" | "vencido";
 };
 
 type Payment = {
@@ -737,6 +750,10 @@ function LojaDeIphonePage() {
     valor: "",
     entrada: "",
     parcelas: "1",
+    modalidade: "fiado" as NonNullable<Sale["modalidade"]>,
+    jurosMensal: "0",
+    diaCobranca: "20",
+    primeiraParcela: "2026-06-20",
   });
 
   const firstName =
@@ -845,13 +862,38 @@ function LojaDeIphonePage() {
   const filteredPayments = payments.filter((item) =>
     searchIn([item.cliente, item.venda, item.forma, item.data], query),
   );
-  const charges = sales
-    .filter((sale) => sale.status !== "Pago")
-    .map((sale) => ({
-      ...sale,
-      aberto: Math.max(sale.unitario * sale.quantidade - sale.desconto - sale.entrada, 0),
-      atraso: sale.vencimento < today,
-    }));
+  const charges = sales.flatMap((sale) => {
+    if (sale.parcelasAgenda?.length) {
+      return sale.parcelasAgenda
+        .filter((installment) => installment.status !== "pago")
+        .map((installment) => ({
+          id: sale.id,
+          installmentId: installment.id,
+          cliente: sale.cliente,
+          item: `${sale.item} - parcela ${installment.numero}/${sale.parcelas}`,
+          tipo: sale.tipo,
+          status: installment.vencimento < today ? "Atrasado" : sale.status,
+          vencimento: installment.vencimento,
+          aberto: installment.valor,
+          atraso: installment.vencimento < today,
+        }));
+    }
+
+    if (sale.status === "Pago") return [];
+    return [
+      {
+        id: sale.id,
+        installmentId: null,
+        cliente: sale.cliente,
+        item: sale.item,
+        tipo: sale.tipo,
+        status: sale.status,
+        vencimento: sale.vencimento,
+        aberto: Math.max(sale.unitario * sale.quantidade - sale.desconto - sale.entrada, 0),
+        atraso: sale.vencimento < today,
+      },
+    ];
+  });
   const filteredCharges = charges.filter(
     (item) =>
       matchesFilters(
@@ -862,6 +904,30 @@ function LojaDeIphonePage() {
       ) &&
       (categoryFilter === "Todos" || categoryFilter === "Todas" || item.vencimento === today),
   );
+  const saleValuePreview = Number(newSale.valor) || 0;
+  const saleEntryPreview = Number(newSale.entrada) || 0;
+  const loanInstallmentsPreview = Math.max(1, Number(newSale.parcelas) || 1);
+  const loanInterestPreview = Math.max(0, Number(newSale.jurosMensal) || 0);
+  const loanBalancePreview = Math.max(saleValuePreview - saleEntryPreview, 0);
+  const loanProgrammedTotalPreview =
+    newSale.modalidade === "emprestimo"
+      ? Number(
+          (
+            loanBalancePreview *
+            (1 + (loanInterestPreview / 100) * loanInstallmentsPreview)
+          ).toFixed(2),
+        )
+      : loanBalancePreview;
+  const loanSchedulePreview =
+    newSale.modalidade === "emprestimo" && loanBalancePreview > 0
+      ? buildLoanSchedule({
+          firstDueDate:
+            newSale.primeiraParcela || nextDueDate(today, Number(newSale.diaCobranca) || 20),
+          chargeDay: Number(newSale.diaCobranca) || 20,
+          count: loanInstallmentsPreview,
+          total: loanProgrammedTotalPreview,
+        })
+      : [];
 
   function resetFilters(tab: TabId) {
     setActive(tab);
@@ -1172,24 +1238,51 @@ function LojaDeIphonePage() {
   function addSale() {
     const value = Number(newSale.valor) || 0;
     const entry = Number(newSale.entrada) || 0;
+    const installments = Math.max(1, Number(newSale.parcelas) || 1);
+    const monthlyInterest = Math.max(0, Number(newSale.jurosMensal) || 0);
+    const chargeDay = Math.min(31, Math.max(1, Number(newSale.diaCobranca) || 20));
     if (!newSale.item || value <= 0) {
       toast.error("Informe item e valor da venda");
       return;
     }
+    if (entry > value) {
+      toast.error("A entrada não pode ser maior que o valor da venda");
+      return;
+    }
+
+    const isLoan = newSale.modalidade === "emprestimo";
+    const balance = Math.max(value - entry, 0);
+    const programmedTotal = isLoan
+      ? Number((balance * (1 + (monthlyInterest / 100) * installments)).toFixed(2))
+      : balance;
+    const schedule =
+      isLoan && balance > 0
+        ? buildLoanSchedule({
+            firstDueDate: newSale.primeiraParcela || nextDueDate(today, chargeDay),
+            chargeDay,
+            count: installments,
+            total: programmedTotal,
+          })
+        : undefined;
     const sale: Sale = {
       id: Date.now(),
       cliente: newSale.cliente || "Cliente balcão",
       tipo: newSale.tipo,
       item: newSale.item,
       quantidade: 1,
-      unitario: value,
+      unitario: isLoan ? value + (programmedTotal - balance) : value,
       desconto: 0,
-      pagamento: entry >= value ? "Pix" : "Entrada + parcelas",
+      pagamento: isLoan ? "Empréstimo programado" : entry >= value ? "Pix" : "Entrada + parcelas",
       entrada: entry,
-      parcelas: Math.max(1, Number(newSale.parcelas) || 1),
-      vencimento: "2026-06-12",
+      parcelas: installments,
+      vencimento: schedule?.[0]?.vencimento ?? newSale.primeiraParcela,
       status: entry >= value ? "Pago" : entry > 0 ? "Parcial" : "Em aberto",
       lucro: Math.max(value * 0.35, 0),
+      modalidade: newSale.modalidade,
+      jurosMensal: monthlyInterest,
+      diaCobranca: chargeDay,
+      totalProgramado: programmedTotal,
+      parcelasAgenda: schedule,
     };
     setSales((items) => [sale, ...items]);
     if (entry > 0) {
@@ -1222,7 +1315,11 @@ function LojaDeIphonePage() {
           : part,
       ),
     );
-    toast.success("Venda registrada e estoque atualizado");
+    toast.success(
+      isLoan
+        ? "Venda por empréstimo programada com cobranças"
+        : "Venda registrada e estoque atualizado",
+    );
   }
 
   function removeById<T extends { id: number }>(
@@ -1233,13 +1330,33 @@ function LojaDeIphonePage() {
     toast.success("Item excluído");
   }
 
-  function markChargePaid(id: number) {
+  function markChargePaid(id: number, installmentId?: number | null) {
     setSales((items) =>
-      items.map((item) =>
-        item.id === id ? { ...item, status: "Pago", entrada: item.unitario - item.desconto } : item,
-      ),
+      items.map((item) => {
+        if (item.id !== id) return item;
+
+        if (!installmentId || !item.parcelasAgenda?.length) {
+          return { ...item, status: "Pago", entrada: item.unitario - item.desconto };
+        }
+
+        const nextAgenda = item.parcelasAgenda.map((installment) =>
+          installment.id === installmentId
+            ? { ...installment, status: "pago" as const }
+            : installment,
+        );
+        const paidValue = nextAgenda
+          .filter((installment) => installment.status === "pago")
+          .reduce((acc, installment) => acc + installment.valor, item.entrada);
+        const allPaid = nextAgenda.every((installment) => installment.status === "pago");
+        return {
+          ...item,
+          parcelasAgenda: nextAgenda,
+          entrada: Math.min(paidValue, item.unitario - item.desconto),
+          status: allPaid ? "Pago" : "Parcial",
+        };
+      }),
     );
-    toast.success("Cobrança marcada como paga");
+    toast.success(installmentId ? "Parcela marcada como paga" : "Cobrança marcada como paga");
   }
 
   return (
@@ -1636,7 +1753,7 @@ function LojaDeIphonePage() {
                   icon={BadgeDollarSign}
                   action={<Button onClick={addSale}>Registrar venda</Button>}
                 >
-                  <div className="grid gap-3 lg:grid-cols-[1fr_150px_1fr_130px_130px_110px]">
+                  <div className="grid gap-3 lg:grid-cols-[1fr_150px_180px_1fr_130px_130px_110px]">
                     <Input
                       placeholder="Cliente"
                       value={newSale.cliente}
@@ -1646,6 +1763,17 @@ function LojaDeIphonePage() {
                       value={newSale.tipo}
                       onChange={(value) => setNewSale({ ...newSale, tipo: value as Sale["tipo"] })}
                       options={["Celular", "Peça", "Serviço", "Combo"]}
+                    />
+                    <SelectLike
+                      value={newSale.modalidade}
+                      onChange={(value) =>
+                        setNewSale({
+                          ...newSale,
+                          modalidade: value as NonNullable<Sale["modalidade"]>,
+                          parcelas: value === "avista" ? "1" : newSale.parcelas,
+                        })
+                      }
+                      options={["avista", "fiado", "emprestimo"]}
                     />
                     <Input
                       placeholder="Produto/peça/serviço"
@@ -1668,7 +1796,97 @@ function LojaDeIphonePage() {
                       onChange={(event) => setNewSale({ ...newSale, parcelas: event.target.value })}
                     />
                   </div>
+                  {newSale.modalidade === "emprestimo" && (
+                    <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground">
+                            Empréstimo programado
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            O sistema gera as cobranças mensais e acompanha cada parcela.
+                          </p>
+                        </div>
+                        <div className="rounded-full bg-surface px-3 py-2 text-xs font-semibold text-primary shadow-soft">
+                          Total programado: {brl(loanProgrammedTotalPreview)}
+                        </div>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <Input
+                          placeholder="Juros mensal %"
+                          value={newSale.jurosMensal}
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            setNewSale({ ...newSale, jurosMensal: event.target.value })
+                          }
+                        />
+                        <Input
+                          placeholder="Dia da cobrança"
+                          value={newSale.diaCobranca}
+                          inputMode="numeric"
+                          onChange={(event) =>
+                            setNewSale({ ...newSale, diaCobranca: event.target.value })
+                          }
+                        />
+                        <Input
+                          type="date"
+                          value={newSale.primeiraParcela}
+                          onChange={(event) =>
+                            setNewSale({ ...newSale, primeiraParcela: event.target.value })
+                          }
+                        />
+                      </div>
+                      {loanSchedulePreview.length > 0 && (
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          {loanSchedulePreview.slice(0, 8).map((installment) => (
+                            <div
+                              key={installment.id}
+                              className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
+                            >
+                              <p className="font-semibold text-foreground">
+                                Parcela {installment.numero}/{loanInstallmentsPreview}
+                              </p>
+                              <p className="mt-1 text-muted-foreground">
+                                {installment.vencimento} • {brl(installment.valor)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </ModuleCard>
+                {sales.some((sale) => sale.parcelasAgenda?.length) && (
+                  <DataCard title="Empréstimos programados">
+                    <ResponsiveTable
+                      columns={[
+                        "Cliente",
+                        "Contrato",
+                        "Parcelas",
+                        "Total programado",
+                        "Próxima cobrança",
+                        "Status",
+                      ]}
+                      rows={sales
+                        .filter((sale) => sale.parcelasAgenda?.length)
+                        .map((sale) => {
+                          const nextInstallment = sale.parcelasAgenda?.find(
+                            (installment) => installment.status !== "pago",
+                          );
+                          return [
+                            sale.cliente,
+                            sale.item,
+                            `${sale.parcelasAgenda?.filter((installment) => installment.status === "pago").length ?? 0}/${sale.parcelas}`,
+                            brl(sale.totalProgramado ?? 0),
+                            nextInstallment
+                              ? `${nextInstallment.vencimento} • ${brl(nextInstallment.valor)}`
+                              : "Quitado",
+                            <StatusPill key="status" status={sale.status} />,
+                          ];
+                        })}
+                    />
+                  </DataCard>
+                )}
                 <DataCard>
                   <ResponsiveTable
                     columns={[
@@ -1793,7 +2011,7 @@ function LojaDeIphonePage() {
                         <ActionButton
                           icon={CheckCircle2}
                           label="Pagar"
-                          onClick={() => markChargePaid(charge.id)}
+                          onClick={() => markChargePaid(charge.id, charge.installmentId)}
                         />
                         <ActionButton
                           icon={PenLine}
@@ -3176,6 +3394,53 @@ function GeneratedPartsPreview() {
 function moneyToNumber(value: string) {
   const normalized = value.replace(/\./g, "").replace(",", ".");
   return Math.max(0, Number(normalized) || 0);
+}
+
+function dateToISO(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function nextDueDate(baseISO: string, chargeDay: number) {
+  const base = new Date(`${baseISO}T12:00:00`);
+  const target = new Date(base.getFullYear(), base.getMonth(), 1, 12);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(chargeDay, lastDay));
+  if (target <= base) {
+    target.setMonth(target.getMonth() + 1, 1);
+    const nextLastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    target.setDate(Math.min(chargeDay, nextLastDay));
+  }
+  return dateToISO(target);
+}
+
+function buildLoanSchedule({
+  firstDueDate,
+  chargeDay,
+  count,
+  total,
+}: {
+  firstDueDate: string;
+  chargeDay: number;
+  count: number;
+  total: number;
+}) {
+  const installmentValue = Number((total / count).toFixed(2));
+  const roundedTotal = installmentValue * count;
+  const correction = Number((total - roundedTotal).toFixed(2));
+  const firstDate = new Date(`${firstDueDate}T12:00:00`);
+
+  return Array.from({ length: count }, (_, index): LoanInstallment => {
+    const dueDate = new Date(firstDate.getFullYear(), firstDate.getMonth() + index, 1, 12);
+    const lastDay = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate();
+    dueDate.setDate(Math.min(chargeDay, lastDay));
+    return {
+      id: Date.now() + index + 1,
+      numero: index + 1,
+      vencimento: dateToISO(dueDate),
+      valor: Number((installmentValue + (index === count - 1 ? correction : 0)).toFixed(2)),
+      status: dateToISO(dueDate) < today ? "vencido" : "pendente",
+    };
+  });
 }
 
 function stockStatus(quantity: number, minQuantity: number) {
