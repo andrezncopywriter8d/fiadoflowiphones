@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -47,6 +47,8 @@ function ProductsPage() {
   const deferredSearch = useDeferredValue(search);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const formRef = useRef<HTMLDivElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const { data: products = [], isLoading, isError, error, refetch } = useProducts(deferredSearch);
   const upsert = useUpsertProduct();
   const del = useDeleteProduct();
@@ -66,6 +68,22 @@ function ProductsPage() {
   const reset = () => {
     setEditing(null);
     setForm(emptyForm);
+  };
+
+  const startNewProduct = () => {
+    reset();
+    window.requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => nameInputRef.current?.focus(), 280);
+    });
+  };
+
+  const startEditProduct = (product: Product) => {
+    setEditing(product);
+    window.requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => nameInputRef.current?.focus(), 280);
+    });
   };
 
   const submit = async () => {
@@ -120,18 +138,19 @@ function ProductsPage() {
               Cadastre seu estoque e baixe automaticamente quando fizer uma venda.
             </p>
           </div>
-          <Button className="motion-pop w-full rounded-full sm:w-auto" onClick={reset}>
+          <Button className="motion-pop w-full rounded-full sm:w-auto" onClick={startNewProduct}>
             <Plus className="h-3.5 w-3.5" /> Novo produto
           </Button>
         </div>
 
-        <div className="rounded-[22px] bg-surface p-4 shadow-soft sm:p-5">
+        <div ref={formRef} className="scroll-mt-6 rounded-[22px] bg-surface p-4 shadow-soft sm:p-5">
           <div className="mb-5 flex items-center gap-2 text-sm font-semibold">
             <PackagePlus className="h-4 w-4 text-primary" />
             {editing ? "Editar produto" : "Cadastro rápido"}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_130px_110px_120px]">
             <Input
+              ref={nameInputRef}
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
               placeholder="Nome do produto"
@@ -261,7 +280,7 @@ function ProductsPage() {
                       <td className="py-3">
                         <div className="flex justify-end gap-1.5">
                           <button
-                            onClick={() => setEditing(product)}
+                            onClick={() => startEditProduct(product)}
                             className="motion-pop grid h-8 w-8 place-items-center rounded-full bg-muted hover:bg-muted/70"
                             title="Editar"
                           >
@@ -342,7 +361,7 @@ function ProductsPage() {
                     </span>
                     <div className="flex gap-1.5">
                       <button
-                        onClick={() => setEditing(product)}
+                        onClick={() => startEditProduct(product)}
                         className="motion-pop grid h-9 w-9 place-items-center rounded-full bg-muted hover:bg-muted/70"
                         title="Editar"
                       >
