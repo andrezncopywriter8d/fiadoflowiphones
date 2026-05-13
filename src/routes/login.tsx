@@ -7,7 +7,7 @@ import { Loader2, ArrowRight } from "lucide-react";
 import { AppLogo } from "@/components/layout/AppLogo";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Entrar — Fiado." }] }),
+  head: () => ({ meta: [{ title: "Entrar - Fiado." }] }),
   component: LoginPage,
 });
 
@@ -52,7 +52,7 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-background p-4 grid place-items-center">
+    <div className="grid min-h-screen w-full place-items-center bg-background p-4">
       <div className="w-full max-w-[440px] rounded-[28px] bg-surface p-8 shadow-float">
         <div className="mb-7">
           <AppLogo />
@@ -94,11 +94,10 @@ function LoginPage() {
             <input
               type="password"
               required
-              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="auth-input"
-              placeholder="••••••••"
+              placeholder="Digite qualquer senha"
             />
           </Field>
 
@@ -123,7 +122,7 @@ function LoginPage() {
           <button
             type="button"
             onClick={() => setMode(mode === "login" ? "signup" : "login")}
-            className="text-primary font-medium hover:underline"
+            className="font-medium text-primary hover:underline"
           >
             {mode === "login" ? "Criar conta" : "Entrar"}
           </button>
