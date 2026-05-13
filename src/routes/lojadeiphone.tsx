@@ -319,6 +319,67 @@ const iphoneModels = [
   "iPhone original",
 ];
 
+const iphoneColorFallback = [
+  "Preto",
+  "Branco",
+  "Azul",
+  "Rosa",
+  "Verde",
+  "Amarelo",
+  "Vermelho",
+  "Roxo",
+  "Dourado",
+  "Prateado",
+  "Grafite",
+  "Titanio natural",
+  "Titanio azul",
+  "Titanio preto",
+  "Titanio branco",
+];
+
+const iphoneColorOptions = (model: string) => {
+  const normalized = model.toLowerCase();
+  if (!normalized) return iphoneColorFallback;
+  if (normalized.includes("air"))
+    return ["Azul ceu", "Dourado claro", "Branco nuvem", "Preto espacial"];
+  if (normalized.includes("17 pro"))
+    return ["Titanio natural", "Titanio azul", "Titanio preto", "Titanio branco"];
+  if (normalized.includes("17")) return ["Preto", "Branco", "Azul", "Rosa", "Verde"];
+  if (normalized.includes("16 pro"))
+    return ["Titanio preto", "Titanio branco", "Titanio natural", "Titanio deserto"];
+  if (normalized.includes("16e")) return ["Preto", "Branco"];
+  if (normalized.includes("16"))
+    return ["Preto", "Branco", "Rosa", "Verde ultramarino", "Azul petróleo"];
+  if (normalized.includes("15 pro"))
+    return ["Titanio natural", "Titanio azul", "Titanio branco", "Titanio preto"];
+  if (normalized.includes("15")) return ["Preto", "Azul", "Verde", "Amarelo", "Rosa"];
+  if (normalized.includes("14 pro"))
+    return ["Preto espacial", "Prateado", "Dourado", "Roxo profundo"];
+  if (normalized.includes("14"))
+    return ["Meia-noite", "Estelar", "Azul", "Roxo", "Amarelo", "Vermelho"];
+  if (normalized.includes("13 pro"))
+    return ["Grafite", "Dourado", "Prateado", "Azul sierra", "Verde alpino"];
+  if (normalized.includes("13"))
+    return ["Meia-noite", "Estelar", "Azul", "Rosa", "Verde", "Vermelho"];
+  if (normalized.includes("12 pro")) return ["Grafite", "Prateado", "Dourado", "Azul pacifico"];
+  if (normalized.includes("12")) return ["Preto", "Branco", "Azul", "Verde", "Roxo", "Vermelho"];
+  if (normalized.includes("11 pro"))
+    return ["Cinza espacial", "Prateado", "Dourado", "Verde meia-noite"];
+  if (normalized.includes("11")) return ["Preto", "Branco", "Roxo", "Verde", "Amarelo", "Vermelho"];
+  if (normalized.includes("xr")) return ["Preto", "Branco", "Azul", "Amarelo", "Coral", "Vermelho"];
+  if (normalized.includes("xs")) return ["Cinza espacial", "Prateado", "Dourado"];
+  if (normalized.includes("x")) return ["Cinza espacial", "Prateado"];
+  if (normalized.includes("8")) return ["Cinza espacial", "Prateado", "Dourado", "Vermelho"];
+  if (normalized.includes("7"))
+    return ["Preto", "Preto brilhante", "Prateado", "Dourado", "Ouro rosa", "Vermelho"];
+  if (normalized.includes("se")) return ["Meia-noite", "Estelar", "Vermelho", "Preto", "Branco"];
+  if (normalized.includes("6")) return ["Cinza espacial", "Prateado", "Dourado", "Ouro rosa"];
+  if (normalized.includes("5c")) return ["Branco", "Rosa", "Amarelo", "Azul", "Verde"];
+  if (normalized.includes("5")) return ["Preto", "Branco", "Cinza espacial", "Prateado", "Dourado"];
+  if (normalized.includes("4")) return ["Preto", "Branco"];
+  return iphoneColorFallback;
+};
+
 const partTypes = [
   "Bateria",
   "Tela frontal",
@@ -2514,6 +2575,13 @@ function StockProductFormCard({
   const margin = sale > 0 ? (profit / sale) * 100 : 0;
   const markup = cost > 0 ? (profit / cost) * 100 : 0;
   const isPhone = form.kind === "Aparelho";
+  const colorOptions = iphoneColorOptions(form.modelo);
+  const updateModel = (modelo: string) => {
+    onChange({
+      modelo,
+      cor: iphoneColorOptions(modelo).includes(form.cor) ? form.cor : "",
+    });
+  };
 
   return (
     <section
@@ -2693,7 +2761,7 @@ function StockProductFormCard({
                 required
                 label="Modelo iPhone"
                 value={form.modelo}
-                onChange={(modelo) => onChange({ modelo })}
+                onChange={updateModel}
                 options={iphoneModels}
               />
               <StockField
@@ -2701,7 +2769,12 @@ function StockProductFormCard({
                 value={form.serial}
                 onChange={(serial) => onChange({ serial })}
               />
-              <StockField label="Cor" value={form.cor} onChange={(cor) => onChange({ cor })} />
+              <StockSelect
+                label="Cor"
+                value={form.cor}
+                onChange={(cor) => onChange({ cor })}
+                options={colorOptions}
+              />
               <StockSelect
                 label="GB"
                 value={form.gb}
@@ -2746,11 +2819,16 @@ function StockProductFormCard({
                 onChange={(disponibilidade) => onChange({ disponibilidade })}
                 options={["Disponível para venda", "Reservada", "Defeituosa", "Sem estoque"]}
               />
-              <StockField label="Cor" value={form.cor} onChange={(cor) => onChange({ cor })} />
+              <StockSelect
+                label="Cor"
+                value={form.cor}
+                onChange={(cor) => onChange({ cor })}
+                options={colorOptions}
+              />
               <StockSelect
                 label="Modelo compativel"
                 value={form.modelo}
-                onChange={(modelo) => onChange({ modelo })}
+                onChange={updateModel}
                 options={iphoneModels}
               />
               <StockField
