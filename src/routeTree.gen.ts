@@ -13,6 +13,7 @@ import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as PagamentosRouteImport } from './routes/pagamentos'
+import { Route as LojadeiphoneRouteImport } from './routes/lojadeiphone'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LembretesRouteImport } from './routes/lembretes'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
@@ -38,6 +39,11 @@ const ProdutosRoute = ProdutosRouteImport.update({
 const PagamentosRoute = PagamentosRouteImport.update({
   id: '/pagamentos',
   path: '/pagamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LojadeiphoneRoute = LojadeiphoneRouteImport.update({
+  id: '/lojadeiphone',
+  path: '/lojadeiphone',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof ConfiguracoesRoute
   '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
+  '/lojadeiphone': typeof LojadeiphoneRoute
   '/pagamentos': typeof PagamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof ConfiguracoesRoute
   '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
+  '/lojadeiphone': typeof LojadeiphoneRoute
   '/pagamentos': typeof PagamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/configuracoes': typeof ConfiguracoesRoute
   '/lembretes': typeof LembretesRoute
   '/login': typeof LoginRoute
+  '/lojadeiphone': typeof LojadeiphoneRoute
   '/pagamentos': typeof PagamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/lembretes'
     | '/login'
+    | '/lojadeiphone'
     | '/pagamentos'
     | '/produtos'
     | '/relatorios'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/lembretes'
     | '/login'
+    | '/lojadeiphone'
     | '/pagamentos'
     | '/produtos'
     | '/relatorios'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/lembretes'
     | '/login'
+    | '/lojadeiphone'
     | '/pagamentos'
     | '/produtos'
     | '/relatorios'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   LembretesRoute: typeof LembretesRoute
   LoginRoute: typeof LoginRoute
+  LojadeiphoneRoute: typeof LojadeiphoneRoute
   PagamentosRoute: typeof PagamentosRoute
   ProdutosRoute: typeof ProdutosRoute
   RelatoriosRoute: typeof RelatoriosRoute
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       path: '/pagamentos'
       fullPath: '/pagamentos'
       preLoaderRoute: typeof PagamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lojadeiphone': {
+      id: '/lojadeiphone'
+      path: '/lojadeiphone'
+      fullPath: '/lojadeiphone'
+      preLoaderRoute: typeof LojadeiphoneRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -242,6 +262,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracoesRoute: ConfiguracoesRoute,
   LembretesRoute: LembretesRoute,
   LoginRoute: LoginRoute,
+  LojadeiphoneRoute: LojadeiphoneRoute,
   PagamentosRoute: PagamentosRoute,
   ProdutosRoute: ProdutosRoute,
   RelatoriosRoute: RelatoriosRoute,
