@@ -954,6 +954,12 @@ function LojaDeIphonePage() {
         item.status,
       ),
   );
+  const loanItemOptions = [
+    ...parts.map((part) => `${part.tipo} ${part.modelo}`),
+    ...phones
+      .filter((phone) => phone.status !== "Vendido")
+      .map((phone) => `${phone.modelo} ${phone.capacidade} ${phone.cor}`),
+  ];
   const filteredPayments = payments.filter((item) =>
     searchIn([item.cliente, item.venda, item.forma, item.data], query),
   );
@@ -1474,7 +1480,7 @@ function LojaDeIphonePage() {
     const chargeDay = Math.min(31, Math.max(1, Number(newLoan.diaCobranca) || 20));
 
     if (!newLoan.item || value <= 0) {
-      toast.error("Informe a peca emprestada e o valor");
+      toast.error("Informe a peca ou celular emprestado e o valor");
       return;
     }
 
@@ -1496,10 +1502,12 @@ function LojaDeIphonePage() {
             total: programmedTotal,
           })
         : undefined;
+    const linkedPhone = phones.find((phone) => newLoan.item.includes(phone.modelo));
+    const loanKind = linkedPhone ? "Celular" : "Peça";
     const sale: Sale = {
       id: Date.now(),
       cliente: newLoan.cliente || "Cliente balcao",
-      tipo: "Peça",
+      tipo: loanKind,
       item: newLoan.item,
       quantidade: 1,
       unitario: value + (programmedTotal - balance),
@@ -1548,6 +1556,11 @@ function LojaDeIphonePage() {
           : part,
       ),
     );
+    if (linkedPhone) {
+      setPhones((items) =>
+        items.map((phone) => (phone.id === linkedPhone.id ? { ...phone, status: "Fiado" } : phone)),
+      );
+    }
     setNewLoan({
       cliente: "",
       item: "",
@@ -2178,51 +2191,91 @@ function LojaDeIphonePage() {
                   icon={Wallet}
                   action={<Button onClick={registerLoan}>Registrar emprestimo</Button>}
                 >
-                  <div className="grid gap-3 lg:grid-cols-[1fr_1fr_130px_130px_110px_120px_150px]">
-                    <Input
-                      placeholder="Cliente"
-                      value={newLoan.cliente}
-                      onChange={(event) => setNewLoan({ ...newLoan, cliente: event.target.value })}
-                    />
-                    <SelectLike
-                      value={newLoan.item}
-                      onChange={(value) => setNewLoan({ ...newLoan, item: value })}
-                      placeholder="Selecionar peca"
-                      options={parts.map((part) => `${part.tipo} ${part.modelo}`)}
-                    />
-                    <Input
-                      placeholder="Valor"
-                      value={newLoan.valor}
-                      inputMode="decimal"
-                      onChange={(event) => setNewLoan({ ...newLoan, valor: event.target.value })}
-                    />
-                    <Input
-                      placeholder="Entrada"
-                      value={newLoan.entrada}
-                      inputMode="decimal"
-                      onChange={(event) => setNewLoan({ ...newLoan, entrada: event.target.value })}
-                    />
-                    <Input
-                      placeholder="Parcelas"
-                      value={newLoan.parcelas}
-                      inputMode="numeric"
-                      onChange={(event) => setNewLoan({ ...newLoan, parcelas: event.target.value })}
-                    />
-                    <Input
-                      placeholder="Dia cobranca"
-                      value={newLoan.diaCobranca}
-                      inputMode="numeric"
-                      onChange={(event) =>
-                        setNewLoan({ ...newLoan, diaCobranca: event.target.value })
-                      }
-                    />
-                    <Input
-                      type="date"
-                      value={newLoan.primeiraParcela}
-                      onChange={(event) =>
-                        setNewLoan({ ...newLoan, primeiraParcela: event.target.value })
-                      }
-                    />
+                  <div className="grid gap-3 lg:grid-cols-[1fr_1.4fr_130px_130px_110px_120px_150px]">
+                    <div className="space-y-1.5">
+                      <Label>Cliente</Label>
+                      <Input
+                        placeholder="Nome do cliente"
+                        value={newLoan.cliente}
+                        onChange={(event) =>
+                          setNewLoan({ ...newLoan, cliente: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Peca ou celular emprestado</Label>
+                      {loanItemOptions.length > 0 ? (
+                        <SelectLike
+                          value={newLoan.item}
+                          onChange={(value) => setNewLoan({ ...newLoan, item: value })}
+                          placeholder="Selecionar do estoque"
+                          options={loanItemOptions}
+                        />
+                      ) : (
+                        <Input
+                          placeholder="Ex: Bateria iPhone 11 ou iPhone 13 128GB"
+                          value={newLoan.item}
+                          onChange={(event) => setNewLoan({ ...newLoan, item: event.target.value })}
+                        />
+                      )}
+                      <Input
+                        placeholder="Ou digite manualmente o item"
+                        value={newLoan.item}
+                        onChange={(event) => setNewLoan({ ...newLoan, item: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Valor</Label>
+                      <Input
+                        placeholder="0,00"
+                        value={newLoan.valor}
+                        inputMode="decimal"
+                        onChange={(event) => setNewLoan({ ...newLoan, valor: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Entrada</Label>
+                      <Input
+                        placeholder="0,00"
+                        value={newLoan.entrada}
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          setNewLoan({ ...newLoan, entrada: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Parcelas</Label>
+                      <Input
+                        placeholder="1"
+                        value={newLoan.parcelas}
+                        inputMode="numeric"
+                        onChange={(event) =>
+                          setNewLoan({ ...newLoan, parcelas: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Dia cobranca</Label>
+                      <Input
+                        placeholder="20"
+                        value={newLoan.diaCobranca}
+                        inputMode="numeric"
+                        onChange={(event) =>
+                          setNewLoan({ ...newLoan, diaCobranca: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Primeira parcela</Label>
+                      <Input
+                        type="date"
+                        value={newLoan.primeiraParcela}
+                        onChange={(event) =>
+                          setNewLoan({ ...newLoan, primeiraParcela: event.target.value })
+                        }
+                      />
+                    </div>
                   </div>
                   <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-[1fr_160px]">
                     <div>
@@ -3634,10 +3687,12 @@ function SelectLike({
   value,
   onChange,
   options,
+  placeholder,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: string[];
+  placeholder?: string;
 }) {
   return (
     <select
@@ -3645,6 +3700,11 @@ function SelectLike({
       onChange={(event) => onChange(event.target.value)}
       className="h-11 min-w-0 rounded-full border border-border bg-surface-muted px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
     >
+      {placeholder && (
+        <option value="" disabled>
+          {placeholder}
+        </option>
+      )}
       {options.map((option) => (
         <option key={option} value={option}>
           {option}
