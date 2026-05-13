@@ -73,10 +73,6 @@ function ProductsPage() {
       toast.error("Informe o nome do produto");
       return;
     }
-    if (isError) {
-      toast.error(productErrorMessage(error));
-      return;
-    }
     if (parseNumber(form.preco_venda) < 0) {
       toast.error("Informe um preço válido");
       return;

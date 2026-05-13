@@ -184,7 +184,7 @@ type Payment = {
   observacoes: string;
 };
 
-type StockKind = "Aparelho" | "Acessorio" | "Peca";
+type StockKind = "Aparelho" | "Acessório" | "Peça";
 
 type StockProductForm = {
   kind: StockKind;
@@ -229,7 +229,7 @@ type ImeiCheckResult = {
   checkedAt: string;
   certificateId: string;
   source: "IMEI.EU API" | "Pre-check local";
-  status: "Aprovado" | "Atencao" | "Pre-check";
+  status: "Aprovado" | "Atenção" | "Pre-check";
   brand?: string;
   model?: string;
   name?: string;
@@ -667,7 +667,7 @@ const seedPayments: Payment[] = [
 const today = "2026-05-13";
 
 const emptyStockProductForm: StockProductForm = {
-  kind: "Peca",
+  kind: "Peça",
   codigo: "",
   tipo: "",
   sku: "",
@@ -680,7 +680,7 @@ const emptyStockProductForm: StockProductForm = {
   imei2: "",
   serial: "",
   codigoBarras: "",
-  disponibilidade: "Disponivel para venda",
+  disponibilidade: "Disponível para venda",
   cor: "",
   gb: "128GB",
   memoriaRam: "",
@@ -901,7 +901,7 @@ function LojaDeIphonePage() {
   async function lookupImei() {
     const imei = onlyDigits(imeiQuery);
     if (!isValidImei(imei)) {
-      toast.error("IMEI invalido. Confira os 15 digitos antes de consultar.");
+      toast.error("IMEI inválido. Confira os 15 dígitos antes de consultar.");
       return;
     }
 
@@ -914,15 +914,15 @@ function LojaDeIphonePage() {
       status: "Pre-check",
       blacklisted: null,
       notes: [
-        "IMEI passou na validacao matematica Luhn.",
-        "Para procedencia completa, configure uma chave de API IMEI.EU.",
+        "IMEI passou na validação matemática Luhn.",
+        "Para procedência completa, configure uma chave de API IMEI.EU.",
       ],
     };
 
     try {
       if (!imeiApiKey.trim()) {
         setImeiResult(baseResult);
-        toast.success("Pre-check gerado. Adicione uma chave para consultar procedencia online.");
+        toast.success("Pre-check gerado. Adicione uma chave para consultar procedência online.");
         return;
       }
 
@@ -961,16 +961,16 @@ function LojaDeIphonePage() {
       const result: ImeiCheckResult = {
         ...baseResult,
         source: "IMEI.EU API",
-        status: blacklisted ? "Atencao" : "Aprovado",
+        status: blacklisted ? "Atenção" : "Aprovado",
         brand: deviceJson.data?.brand,
         model: deviceJson.data?.model,
         name: deviceJson.data?.name,
         blacklisted,
         notes: [
-          `Marca/modelo retornado pela API: ${[deviceJson.data?.brand, deviceJson.data?.name, deviceJson.data?.model].filter(Boolean).join(" ") || "nao informado"}.`,
+          `Marca/modelo retornado pela API: ${[deviceJson.data?.brand, deviceJson.data?.name, deviceJson.data?.model].filter(Boolean).join(" ") || "não informado"}.`,
           blacklisted
-            ? "A API marcou este IMEI como blacklist. Nao recomendo compra/venda sem auditoria manual."
-            : "A API nao retornou blacklist para este IMEI.",
+            ? "A API marcou este IMEI como blacklist. Não recomendo compra/venda sem auditoria manual."
+            : "A API não retornou blacklist para este IMEI.",
         ],
       };
 
@@ -981,10 +981,10 @@ function LojaDeIphonePage() {
         ...baseResult,
         notes: [
           ...baseResult.notes,
-          `A API nao respondeu nesta tentativa: ${error instanceof Error ? error.message : "erro desconhecido"}.`,
+          `A API não respondeu nesta tentativa: ${error instanceof Error ? error.message : "erro desconhecido"}.`,
         ],
       });
-      toast.error("Nao consegui consultar a API agora. Gere o pre-check e tente novamente.");
+      toast.error("Não consegui consultar a API agora. Gere o pre-check e tente novamente.");
     } finally {
       setCheckingImei(false);
     }
@@ -1041,9 +1041,9 @@ function LojaDeIphonePage() {
       stockProduct.tipo.trim() ||
       (stockProduct.kind === "Aparelho"
         ? "Celular"
-        : stockProduct.kind === "Acessorio"
-          ? "Acessorio"
-          : "Peca");
+        : stockProduct.kind === "Acessório"
+          ? "Acessório"
+          : "Peça");
 
     if (!selectedType || !productName || salePrice <= 0) {
       toast.error("Preencha tipo, nome do produto e valor de venda");
@@ -1061,17 +1061,17 @@ function LojaDeIphonePage() {
         bateria: Math.max(0, Number(stockProduct.tags.match(/\d+/)?.[0]) || 100),
         imei: stockProduct.imei || stockProduct.codigo || `IMEI-${Date.now().toString().slice(-6)}`,
         serial: stockProduct.serial || stockProduct.sku || `SN-${Date.now().toString().slice(-6)}`,
-        faceId: "Nao sei",
-        trueTone: "Nao sei",
-        telaOriginal: "Nao sei",
-        bateriaOriginal: "Nao sei",
-        aberto: "Nao sei",
+        faceId: "Não sei",
+        trueTone: "Não sei",
+        telaOriginal: "Não sei",
+        bateriaOriginal: "Não sei",
+        aberto: "Não sei",
         bloqueio: stockProduct.disponibilidade,
         acompanha: [stockProduct.subcategoria || "Cadastro estoque"].filter(Boolean),
         custoCompra: cost,
         custoManutencao: 0,
         precoVenda: salePrice,
-        status: "Disponivel" as PhoneStatus,
+        status: "Disponível" as PhoneStatus,
         observacoes: stockProduct.observacao || "Cadastrado pelo estoque completo.",
       };
       setPhones((items) => [phone, ...items]);
@@ -1085,18 +1085,18 @@ function LojaDeIphonePage() {
         sku:
           stockProduct.sku ||
           `${selectedType.slice(0, 3).toUpperCase()}-${stockProduct.modelo.replace(/\s/g, "-").toUpperCase()}`,
-        fornecedor: stockProduct.fornecedor || "Fornecedor nao informado",
+        fornecedor: stockProduct.fornecedor || "Fornecedor não informado",
         custo: cost,
         preco: salePrice,
         precoInstalado: salePrice,
         quantidade: quantity,
         minimo: minQuantity,
-        localizacao: stockProduct.codigoBarras || "Sem localizacao",
+        localizacao: stockProduct.codigoBarras || "Sem localização",
         garantia: warranty,
         status: stockStatus(quantity, minQuantity),
       };
       setParts((items) => [part, ...items]);
-      toast.success(stockProduct.kind === "Acessorio" ? "Acessorio cadastrado" : "Peca cadastrada");
+      toast.success(stockProduct.kind === "Acessório" ? "Acessório cadastrado" : "Peça cadastrada");
     }
 
     setStockProduct(emptyStockProductForm);
@@ -2143,7 +2143,7 @@ function ImeiLookupCard({
             </h2>
             <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
               Valida o IMEI, consulta marca/modelo e blacklist pela API IMEI.EU quando houver chave,
-              e gera um certificado de procedencia para o aparelho.
+              e gera um certificado de procedência para o aparelho.
             </p>
           </div>
         </div>
@@ -2177,16 +2177,16 @@ function ImeiLookupCard({
             value={imei}
             inputMode="numeric"
             maxLength={19}
-            placeholder="Digite os 15 digitos do IMEI"
+            placeholder="Digite os 15 dígitos do IMEI"
             onChange={(event) => onImeiChange(event.target.value)}
             className="h-11 rounded-2xl bg-surface-muted"
           />
           <span className={valid ? "text-success" : "text-muted-foreground"}>
             {normalized.length === 15
               ? valid
-                ? "IMEI valido pelo algoritmo Luhn"
-                : "IMEI com digito verificador invalido"
-              : `${normalized.length}/15 digitos`}
+                ? "IMEI válido pelo algoritmo Luhn"
+                : "IMEI com dígito verificador inválido"
+              : `${normalized.length}/15 dígitos`}
           </span>
         </Label>
 
@@ -2209,12 +2209,12 @@ function ImeiLookupCard({
             className={`rounded-[22px] p-4 ${
               result.status === "Aprovado"
                 ? "bg-success/10 text-success"
-                : result.status === "Atencao"
+                : result.status === "Atenção"
                   ? "bg-destructive/10 text-destructive"
                   : "bg-primary/10 text-primary"
             }`}
           >
-            <p className="text-xs font-medium opacity-80">Status da procedencia</p>
+            <p className="text-xs font-medium opacity-80">Status da procedência</p>
             <strong className="mt-2 block text-[26px] leading-none font-semibold">
               {result.status}
             </strong>
@@ -2226,13 +2226,13 @@ function ImeiLookupCard({
             <div className="grid gap-2 sm:grid-cols-2">
               <Field label="IMEI consultado" value={result.imei} />
               <Field label="Data da consulta" value={result.checkedAt} />
-              <Field label="Marca" value={result.brand || "Nao informado"} />
-              <Field label="Modelo" value={result.name || result.model || "Nao informado"} />
+              <Field label="Marca" value={result.brand || "Não informado"} />
+              <Field label="Modelo" value={result.name || result.model || "Não informado"} />
               <Field
                 label="Blacklist"
                 value={
                   result.blacklisted === null
-                    ? "Nao consultado"
+                    ? "Não consultado"
                     : result.blacklisted
                       ? "Com alerta"
                       : "Sem alerta"
@@ -2241,7 +2241,7 @@ function ImeiLookupCard({
               <Field label="Origem" value={result.source} />
             </div>
             <div className="mt-2 rounded-2xl bg-surface p-3">
-              <p className="mb-2 text-xs font-semibold text-foreground">Notas da verificacao</p>
+              <p className="mb-2 text-xs font-semibold text-foreground">Notas da verificação</p>
               <ul className="grid gap-1 text-xs text-muted-foreground">
                 {result.notes.map((note) => (
                   <li key={note}>- {note}</li>
@@ -2293,7 +2293,7 @@ function StockProductFormCard({
           </div>
 
           <div className="flex overflow-x-auto rounded-2xl bg-surface-muted p-1">
-            {(["Aparelho", "Acessorio", "Peca"] as StockKind[]).map((kind) => (
+            {(["Aparelho", "Acessório", "Peça"] as StockKind[]).map((kind) => (
               <button
                 key={kind}
                 type="button"
@@ -2355,8 +2355,8 @@ function StockProductFormCard({
             options={
               isPhone
                 ? ["Celular"]
-                : form.kind === "Acessorio"
-                  ? ["Capinha", "Pelicula", "Cabo", "Carregador", "Acessorio"]
+                : form.kind === "Acessório"
+                  ? ["Capinha", "Película", "Cabo", "Carregador", "Acessório"]
                   : partTypes
             }
           />
@@ -2380,7 +2380,7 @@ function StockProductFormCard({
             onChange={(categoria) => onChange({ categoria })}
             options={
               isPhone
-                ? ["Novo", "Seminovo", "Usado", "Vitrine", "Sucata", "Retorno de assistencia"]
+                ? ["Novo", "Seminovo", "Usado", "Vitrine", "Sucata", "Retorno de assistência"]
                 : [
                     "Original Apple",
                     "Original retirada",
@@ -2476,7 +2476,7 @@ function StockProductFormCard({
                   "Usado",
                   "Vitrine",
                   "Sucata",
-                  "Retorno de assistencia",
+                  "Retorno de assistência",
                 ]}
               />
             </>
@@ -2497,7 +2497,7 @@ function StockProductFormCard({
                 label="Disponibilidade"
                 value={form.disponibilidade}
                 onChange={(disponibilidade) => onChange({ disponibilidade })}
-                options={["Disponivel para venda", "Reservada", "Defeituosa", "Sem estoque"]}
+                options={["Disponível para venda", "Reservada", "Defeituosa", "Sem estoque"]}
               />
               <StockField label="Cor" value={form.cor} onChange={(cor) => onChange({ cor })} />
               <StockSelect
@@ -3130,7 +3130,7 @@ function stockStatus(quantity: number, minQuantity: number) {
       ? "Sem estoque"
       : minQuantity > 0 && quantity <= minQuantity
         ? "Baixo estoque"
-        : "Disponivel"
+        : "Disponível"
   ) as Part["status"];
 }
 
@@ -3153,15 +3153,15 @@ function isValidImei(value: string) {
 
 function buildImeiCertificateHtml(result: ImeiCheckResult, operator: string) {
   const statusColor =
-    result.status === "Aprovado" ? "#16a34a" : result.status === "Atencao" ? "#dc2626" : "#5b55ff";
+    result.status === "Aprovado" ? "#16a34a" : result.status === "Atenção" ? "#dc2626" : "#5b55ff";
   const blacklist =
     result.blacklisted === null
-      ? "Nao consultado"
+      ? "Não consultado"
       : result.blacklisted
         ? "Com alerta"
         : "Sem alerta";
-  const brand = escapeHtml(result.brand || "Nao informado");
-  const model = escapeHtml(result.name || result.model || "Nao informado");
+  const brand = escapeHtml(result.brand || "Não informado");
+  const model = escapeHtml(result.name || result.model || "Não informado");
   const notes = result.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("");
 
   return `<!doctype html>
@@ -3193,12 +3193,12 @@ function buildImeiCertificateHtml(result: ImeiCheckResult, operator: string) {
       <div class="top">
         <div>
           <div class="brand">Fiado.</div>
-          <p>Certificado de consulta e procedencia de aparelho</p>
+          <p>Certificado de consulta e procedência de aparelho</p>
         </div>
         <div class="badge">${escapeHtml(result.status)}</div>
       </div>
       <h1>Certificado IMEI</h1>
-      <p>Este documento registra a consulta feita no sistema Fiado para apoio na compra, venda ou assistencia tecnica do aparelho.</p>
+      <p>Este documento registra a consulta feita no sistema Fiado para apoio na compra, venda ou assistência técnica do aparelho.</p>
       <section class="grid">
         <div class="field"><div class="label">Certificado</div><div class="value">${escapeHtml(result.certificateId)}</div></div>
         <div class="field"><div class="label">IMEI</div><div class="value">${escapeHtml(result.imei)}</div></div>
@@ -3210,7 +3210,7 @@ function buildImeiCertificateHtml(result: ImeiCheckResult, operator: string) {
         <div class="field"><div class="label">Operador</div><div class="value">${escapeHtml(operator)}</div></div>
       </section>
       <section class="notes">
-        <strong>Notas da verificacao</strong>
+        <strong>Notas da verificação</strong>
         <ul>${notes}</ul>
       </section>
       <div class="footer">

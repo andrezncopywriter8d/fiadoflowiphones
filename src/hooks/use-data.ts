@@ -239,6 +239,30 @@ const saveLocalProduct = (
   return saved;
 };
 
+const decrementLocalProductsForSale = (userId: string, items: SaleProductInput[]) => {
+  if (!items.length) return;
+  const products = readLocalProducts(userId);
+  if (!products.length) return;
+
+  const nextProducts = [...products];
+  for (const item of items) {
+    const productIndex = nextProducts.findIndex((product) => product.id === item.product_id);
+    if (productIndex < 0) continue;
+
+    const product = nextProducts[productIndex];
+    if (product.quantidade < item.quantidade) {
+      throw new Error(`Estoque insuficiente para ${item.product_name}`);
+    }
+    nextProducts[productIndex] = {
+      ...product,
+      quantidade: Math.max(product.quantidade - item.quantidade, 0),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  writeLocalProducts(userId, nextProducts);
+};
+
 const normalizeSaleItem = (item: RawSaleItem): SaleItem => ({
   ...item,
   preco_unitario: num(item.preco_unitario),
@@ -247,7 +271,10 @@ const normalizeSaleItem = (item: RawSaleItem): SaleItem => ({
 
 const restoreSaleItemsToStock = async (saleId: string) => {
   const { data, error } = await supabase.from("sale_items").select("*").eq("sale_id", saleId);
-  if (error) throw error;
+  if (error) {
+    if (isProductSchemaError(error)) return;
+    throw error;
+  }
 
   const items = ((data ?? []) as RawSaleItem[]).map(normalizeSaleItem);
   for (const item of items) {
@@ -257,12 +284,18 @@ const restoreSaleItemsToStock = async (saleId: string) => {
       .select("quantidade")
       .eq("id", item.product_id)
       .maybeSingle();
-    if (productError) throw productError;
+    if (productError) {
+      if (isProductSchemaError(productError)) return;
+      throw productError;
+    }
     const { error: updateError } = await supabase
       .from("products")
       .update({ quantidade: (product?.quantidade ?? 0) + item.quantidade })
       .eq("id", item.product_id);
-    if (updateError) throw updateError;
+    if (updateError) {
+      if (isProductSchemaError(updateError)) return;
+      throw updateError;
+    }
   }
 };
 
@@ -458,7 +491,10 @@ export function useSaleItems(saleId: string | undefined) {
         .select("*")
         .eq("sale_id", saleId!)
         .order("created_at", { ascending: true });
-      if (error) throw error;
+      if (error) {
+        if (isProductSchemaError(error)) return [];
+        throw error;
+      }
       return ((data ?? []) as RawSaleItem[]).map(normalizeSaleItem);
     },
   });
@@ -601,6 +637,10 @@ export function useUpsertSale() {
           if (updateError && isProductSchemaError(updateError)) break;
           if (updateError) throw updateError;
         }
+      }
+
+      if (items.length > 0 && !canUseProductTables) {
+        decrementLocalProductsForSale(user.id, items);
       }
 
       await supabase.from("reminders").delete().eq("sale_id", saved.id);
