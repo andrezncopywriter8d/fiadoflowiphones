@@ -59,6 +59,7 @@ type TabId =
   | "servicos"
   | "clientes"
   | "vendas"
+  | "emprestimos"
   | "pagamentos"
   | "cobrancas"
   | "estoque"
@@ -179,6 +180,17 @@ type Sale = {
   parcelasAgenda?: LoanInstallment[];
 };
 
+type LoanForm = {
+  cliente: string;
+  item: string;
+  valor: string;
+  entrada: string;
+  parcelas: string;
+  jurosMensal: string;
+  diaCobranca: string;
+  primeiraParcela: string;
+};
+
 type LoanInstallment = {
   id: number;
   numero: number;
@@ -257,6 +269,7 @@ const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "servicos", label: "Serviços", icon: Wrench },
   { id: "clientes", label: "Clientes", icon: Users },
   { id: "vendas", label: "Vendas", icon: BadgeDollarSign },
+  { id: "emprestimos", label: "Emprestimos", icon: Wallet },
   { id: "pagamentos", label: "Pagamentos", icon: CreditCard },
   { id: "cobrancas", label: "Cobranças", icon: BellRing },
   { id: "estoque", label: "Estoque", icon: Boxes },
@@ -817,6 +830,16 @@ function LojaDeIphonePage() {
     diaCobranca: "20",
     primeiraParcela: "2026-06-20",
   });
+  const [newLoan, setNewLoan] = useState<LoanForm>({
+    cliente: "",
+    item: "",
+    valor: "",
+    entrada: "",
+    parcelas: "1",
+    jurosMensal: "0",
+    diaCobranca: "20",
+    primeiraParcela: "2026-06-20",
+  });
 
   const firstName =
     user?.user_metadata?.nome?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "Andre";
@@ -921,6 +944,16 @@ function LojaDeIphonePage() {
       ) &&
       (categoryFilter === "Todos" || item.tipo === categoryFilter),
   );
+  const filteredLoans = sales.filter(
+    (item) =>
+      item.modalidade === "emprestimo" &&
+      matchesFilters(
+        [item.cliente, item.item, item.tipo, item.status],
+        query,
+        statusFilter,
+        item.status,
+      ),
+  );
   const filteredPayments = payments.filter((item) =>
     searchIn([item.cliente, item.venda, item.forma, item.data], query),
   );
@@ -990,6 +1023,27 @@ function LojaDeIphonePage() {
           total: loanProgrammedTotalPreview,
         })
       : [];
+  const loanFormValuePreview = Number(newLoan.valor) || 0;
+  const loanFormEntryPreview = Number(newLoan.entrada) || 0;
+  const loanFormInstallmentsPreview = Math.max(1, Number(newLoan.parcelas) || 1);
+  const loanFormInterestPreview = Math.max(0, Number(newLoan.jurosMensal) || 0);
+  const loanFormChargeDayPreview = Math.min(31, Math.max(1, Number(newLoan.diaCobranca) || 20));
+  const loanFormBalancePreview = Math.max(loanFormValuePreview - loanFormEntryPreview, 0);
+  const loanFormProgrammedTotalPreview = Number(
+    (
+      loanFormBalancePreview *
+      (1 + (loanFormInterestPreview / 100) * loanFormInstallmentsPreview)
+    ).toFixed(2),
+  );
+  const loanFormSchedulePreview =
+    loanFormBalancePreview > 0
+      ? buildLoanSchedule({
+          firstDueDate: newLoan.primeiraParcela || nextDueDate(today, loanFormChargeDayPreview),
+          chargeDay: loanFormChargeDayPreview,
+          count: loanFormInstallmentsPreview,
+          total: loanFormProgrammedTotalPreview,
+        })
+      : [];
 
   function resetFilters(tab: TabId) {
     setActive(tab);
@@ -1055,6 +1109,12 @@ function LojaDeIphonePage() {
     if (active === "vendas") {
       focusSection("iphone-sale-form");
       toast.success("Venda pronta para preencher");
+      return;
+    }
+
+    if (active === "emprestimos") {
+      focusSection("iphone-loan-form");
+      toast.success("Registro de emprestimo pronto para preencher");
     }
   }
 
@@ -1406,6 +1466,147 @@ function LojaDeIphonePage() {
     );
   }
 
+  function registerLoan() {
+    const value = Number(newLoan.valor) || 0;
+    const entry = Number(newLoan.entrada) || 0;
+    const installments = Math.max(1, Number(newLoan.parcelas) || 1);
+    const monthlyInterest = Math.max(0, Number(newLoan.jurosMensal) || 0);
+    const chargeDay = Math.min(31, Math.max(1, Number(newLoan.diaCobranca) || 20));
+
+    if (!newLoan.item || value <= 0) {
+      toast.error("Informe a peca emprestada e o valor");
+      return;
+    }
+
+    if (entry > value) {
+      toast.error("A entrada nao pode ser maior que o valor do emprestimo");
+      return;
+    }
+
+    const balance = Math.max(value - entry, 0);
+    const programmedTotal = Number(
+      (balance * (1 + (monthlyInterest / 100) * installments)).toFixed(2),
+    );
+    const schedule =
+      balance > 0
+        ? buildLoanSchedule({
+            firstDueDate: newLoan.primeiraParcela || nextDueDate(today, chargeDay),
+            chargeDay,
+            count: installments,
+            total: programmedTotal,
+          })
+        : undefined;
+    const sale: Sale = {
+      id: Date.now(),
+      cliente: newLoan.cliente || "Cliente balcao",
+      tipo: "Peça",
+      item: newLoan.item,
+      quantidade: 1,
+      unitario: value + (programmedTotal - balance),
+      desconto: 0,
+      pagamento: "Emprestimo programado",
+      entrada: entry,
+      parcelas: installments,
+      vencimento: schedule?.[0]?.vencimento ?? newLoan.primeiraParcela,
+      status: entry >= value ? "Pago" : entry > 0 ? "Parcial" : "Em aberto",
+      lucro: Math.max(value * 0.25, 0),
+      modalidade: "emprestimo",
+      jurosMensal: monthlyInterest,
+      diaCobranca: chargeDay,
+      totalProgramado: programmedTotal,
+      parcelasAgenda: schedule,
+    };
+
+    setSales((items) => [sale, ...items]);
+    if (entry > 0) {
+      setPayments((items) => [
+        {
+          id: Date.now() + 1,
+          cliente: sale.cliente,
+          venda: sale.item,
+          valor: entry,
+          forma: "Entrada de emprestimo",
+          data: today,
+          observacoes: "Entrada registrada no emprestimo de peca.",
+        },
+        ...items,
+      ]);
+    }
+    setParts((items) =>
+      items.map((part) =>
+        sale.item.includes(part.tipo) && sale.item.includes(part.modelo)
+          ? {
+              ...part,
+              quantidade: Math.max(part.quantidade - 1, 0),
+              status:
+                part.quantidade - 1 <= 0
+                  ? "Sem estoque"
+                  : part.quantidade - 1 <= part.minimo
+                    ? "Baixo estoque"
+                    : "Disponível",
+            }
+          : part,
+      ),
+    );
+    setNewLoan({
+      cliente: "",
+      item: "",
+      valor: "",
+      entrada: "",
+      parcelas: "1",
+      jurosMensal: "0",
+      diaCobranca: "20",
+      primeiraParcela: nextDueDate(today, 20),
+    });
+    toast.success("Emprestimo registrado e cobrancas programadas");
+  }
+
+  function validateLoanPayment(saleId: number) {
+    const sale = sales.find((item) => item.id === saleId);
+    const nextInstallment = sale?.parcelasAgenda?.find(
+      (installment) => installment.status !== "pago",
+    );
+
+    if (!sale || !nextInstallment) {
+      toast.error("Nenhuma parcela pendente para validar");
+      return;
+    }
+
+    setSales((items) =>
+      items.map((item) => {
+        if (item.id !== saleId || !item.parcelasAgenda?.length) return item;
+        const nextAgenda = item.parcelasAgenda.map((installment) =>
+          installment.id === nextInstallment.id
+            ? { ...installment, status: "pago" as const }
+            : installment,
+        );
+        const paidValue = nextAgenda
+          .filter((installment) => installment.status === "pago")
+          .reduce((acc, installment) => acc + installment.valor, item.entrada);
+        const allPaid = nextAgenda.every((installment) => installment.status === "pago");
+        return {
+          ...item,
+          parcelasAgenda: nextAgenda,
+          entrada: Math.min(paidValue, item.unitario - item.desconto),
+          status: allPaid ? "Pago" : "Parcial",
+        };
+      }),
+    );
+    setPayments((items) => [
+      {
+        id: Date.now() + nextInstallment.id,
+        cliente: sale.cliente,
+        venda: `${sale.item} - parcela ${nextInstallment.numero}/${sale.parcelas}`,
+        valor: nextInstallment.valor,
+        forma: "Emprestimo",
+        data: today,
+        observacoes: "Pagamento de emprestimo validado.",
+      },
+      ...items,
+    ]);
+    toast.success("Pagamento do emprestimo validado");
+  }
+
   function removeById<T extends { id: number }>(
     setter: React.Dispatch<React.SetStateAction<T[]>>,
     id: number,
@@ -1577,7 +1778,9 @@ function LojaDeIphonePage() {
                     ? partTypes.slice(0, 18)
                     : active === "vendas"
                       ? ["Celular", "Peça", "Serviço", "Combo"]
-                      : []
+                      : active === "emprestimos"
+                        ? ["Peça"]
+                        : []
                 }
               />
             )}
@@ -1787,7 +1990,33 @@ function LojaDeIphonePage() {
                   icon={BadgeDollarSign}
                   action={<Button onClick={addSale}>Registrar venda</Button>}
                 >
-                  <div className="grid gap-3 lg:grid-cols-[1fr_150px_180px_1fr_130px_130px_110px]">
+                  <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
+                    {[
+                      { id: "avista", label: "A vista" },
+                      { id: "fiado", label: "Fiado" },
+                      { id: "emprestimo", label: "Emprestimo" },
+                    ].map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() =>
+                          setNewSale({
+                            ...newSale,
+                            modalidade: option.id as NonNullable<Sale["modalidade"]>,
+                            parcelas: option.id === "avista" ? "1" : newSale.parcelas,
+                          })
+                        }
+                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                          newSale.modalidade === option.id
+                            ? "bg-primary text-primary-foreground shadow-soft"
+                            : "bg-surface text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[1fr_150px_1fr_130px_130px_110px]">
                     <Input
                       placeholder="Cliente"
                       value={newSale.cliente}
@@ -1797,17 +2026,6 @@ function LojaDeIphonePage() {
                       value={newSale.tipo}
                       onChange={(value) => setNewSale({ ...newSale, tipo: value as Sale["tipo"] })}
                       options={["Celular", "Peça", "Serviço", "Combo"]}
-                    />
-                    <SelectLike
-                      value={newSale.modalidade}
-                      onChange={(value) =>
-                        setNewSale({
-                          ...newSale,
-                          modalidade: value as NonNullable<Sale["modalidade"]>,
-                          parcelas: value === "avista" ? "1" : newSale.parcelas,
-                        })
-                      }
-                      options={["avista", "fiado", "emprestimo"]}
                     />
                     <Input
                       placeholder="Produto/peça/serviço"
@@ -1947,6 +2165,144 @@ function LojaDeIphonePage() {
                       <StatusPill key="status" status={sale.status} />,
                       <Actions key="actions" onDelete={() => removeById(setSales, sale.id)} />,
                     ])}
+                  />
+                </DataCard>
+              </>
+            )}
+
+            {active === "emprestimos" && (
+              <>
+                <ModuleCard
+                  id="iphone-loan-form"
+                  title="Registrar emprestimo de peca"
+                  icon={Wallet}
+                  action={<Button onClick={registerLoan}>Registrar emprestimo</Button>}
+                >
+                  <div className="grid gap-3 lg:grid-cols-[1fr_1fr_130px_130px_110px_120px_150px]">
+                    <Input
+                      placeholder="Cliente"
+                      value={newLoan.cliente}
+                      onChange={(event) => setNewLoan({ ...newLoan, cliente: event.target.value })}
+                    />
+                    <SelectLike
+                      value={newLoan.item}
+                      onChange={(value) => setNewLoan({ ...newLoan, item: value })}
+                      placeholder="Selecionar peca"
+                      options={parts.map((part) => `${part.tipo} ${part.modelo}`)}
+                    />
+                    <Input
+                      placeholder="Valor"
+                      value={newLoan.valor}
+                      inputMode="decimal"
+                      onChange={(event) => setNewLoan({ ...newLoan, valor: event.target.value })}
+                    />
+                    <Input
+                      placeholder="Entrada"
+                      value={newLoan.entrada}
+                      inputMode="decimal"
+                      onChange={(event) => setNewLoan({ ...newLoan, entrada: event.target.value })}
+                    />
+                    <Input
+                      placeholder="Parcelas"
+                      value={newLoan.parcelas}
+                      inputMode="numeric"
+                      onChange={(event) => setNewLoan({ ...newLoan, parcelas: event.target.value })}
+                    />
+                    <Input
+                      placeholder="Dia cobranca"
+                      value={newLoan.diaCobranca}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setNewLoan({ ...newLoan, diaCobranca: event.target.value })
+                      }
+                    />
+                    <Input
+                      type="date"
+                      value={newLoan.primeiraParcela}
+                      onChange={(event) =>
+                        setNewLoan({ ...newLoan, primeiraParcela: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-[1fr_160px]">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Agenda de cobranca</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Ao registrar, a peca baixa do estoque e as parcelas entram em Cobrancas.
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        {loanFormSchedulePreview.slice(0, 4).map((installment) => (
+                          <div
+                            key={installment.id}
+                            className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
+                          >
+                            <p className="font-semibold text-foreground">
+                              Parcela {installment.numero}/{loanFormInstallmentsPreview}
+                            </p>
+                            <p className="mt-1 text-muted-foreground">
+                              {installment.vencimento} - {brl(installment.valor)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-[18px] bg-surface p-4 shadow-soft">
+                      <p className="text-xs text-muted-foreground">Total programado</p>
+                      <p className="mt-1 text-2xl font-semibold text-foreground">
+                        {brl(loanFormProgrammedTotalPreview)}
+                      </p>
+                      <Input
+                        className="mt-3"
+                        placeholder="Juros mensal %"
+                        value={newLoan.jurosMensal}
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          setNewLoan({ ...newLoan, jurosMensal: event.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </ModuleCard>
+
+                <DataCard title="Emprestimos ativos">
+                  <ResponsiveTable
+                    columns={[
+                      "Cliente",
+                      "Peca",
+                      "Parcelas",
+                      "Total programado",
+                      "Proxima cobranca",
+                      "Status",
+                      "Acoes",
+                    ]}
+                    rows={filteredLoans.map((sale) => {
+                      const nextInstallment = sale.parcelasAgenda?.find(
+                        (installment) => installment.status !== "pago",
+                      );
+                      return [
+                        sale.cliente,
+                        sale.item,
+                        `${sale.parcelasAgenda?.filter((installment) => installment.status === "pago").length ?? 0}/${sale.parcelas}`,
+                        brl(sale.totalProgramado ?? 0),
+                        nextInstallment
+                          ? `${nextInstallment.vencimento} - ${brl(nextInstallment.valor)}`
+                          : "Quitado",
+                        <StatusPill key="status" status={sale.status} />,
+                        <div key="actions" className="flex flex-wrap justify-end gap-2">
+                          <ActionButton
+                            icon={CheckCircle2}
+                            label="Validar pagamento"
+                            onClick={() => validateLoanPayment(sale.id)}
+                          />
+                          <ActionButton
+                            icon={Trash2}
+                            label="Excluir"
+                            danger
+                            onClick={() => removeById(setSales, sale.id)}
+                          />
+                        </div>,
+                      ];
+                    })}
                   />
                 </DataCard>
               </>
@@ -3041,6 +3397,7 @@ function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => voi
     servicos: "Ordens de serviço com diagnóstico, peça usada, mão de obra, prazo e garantia.",
     clientes: "Histórico de aparelhos, serviços, peças compradas e valores em aberto.",
     vendas: "Venda celular, peça, serviço ou combo com baixa de estoque e cálculo de lucro.",
+    emprestimos: "Registre pecas emprestadas, acompanhe parcelas e valide pagamentos.",
     pagamentos: "Entradas e pagamentos vinculados a vendas, clientes e comprovantes.",
     cobrancas: "Cobranças de hoje, vencidas e próximas com mensagem pronta para WhatsApp.",
     estoque: "Visão de aparelhos, peças, acessórios, movimentação e lucro potencial.",
@@ -3052,6 +3409,7 @@ function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => voi
     pecas: "+ Adicionar peça",
     servicos: "+ Novo serviço",
     vendas: "+ Nova venda",
+    emprestimos: "+ Novo emprestimo",
     estoque: "+ Adicionar item",
   };
   return (
