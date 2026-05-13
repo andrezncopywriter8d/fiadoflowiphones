@@ -1163,7 +1163,10 @@ function LojaDeIphonePage() {
     const cost = moneyToNumber(stockProduct.valorCusto);
     const salePrice = moneyToNumber(stockProduct.valorVenda);
     const warranty = Math.max(0, Number(stockProduct.diasGarantia) || 0);
-    const productName = stockProduct.nome.trim();
+    const productName =
+      stockProduct.kind === "Aparelho"
+        ? (stockProduct.modelo || stockProduct.nome).trim()
+        : stockProduct.nome.trim();
     const selectedType =
       stockProduct.tipo.trim() ||
       (stockProduct.kind === "Aparelho"
@@ -2609,13 +2612,15 @@ function StockProductFormCard({
             value={form.dataEntrada}
             onChange={(dataEntrada) => onChange({ dataEntrada })}
           />
-          <StockField
-            required
-            label={isPhone ? "Modelo Aparelho" : "Nome produto"}
-            value={form.nome}
-            placeholder={isPhone ? "Ex: iPhone 13 128GB Azul" : "Ex: Tela iPhone 11 Incell"}
-            onChange={(nome) => onChange({ nome })}
-          />
+          {!isPhone && (
+            <StockField
+              required
+              label="Nome produto"
+              value={form.nome}
+              placeholder="Ex: Tela iPhone 11 Incell"
+              onChange={(nome) => onChange({ nome })}
+            />
+          )}
           <StockSelect
             label="Categoria"
             value={form.categoria}
