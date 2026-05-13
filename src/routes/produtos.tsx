@@ -1,11 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { type ReactNode, useDeferredValue, useEffect, useRef, useState } from "react";
+import { type ReactNode, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { brl } from "@/lib/format";
 import { useDeleteProduct, useProducts, useUpsertProduct, type Product } from "@/hooks/use-data";
@@ -24,10 +39,86 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+const productCategories = ["Celular", "Peça", "Acessório", "Produto geral"];
+const brandOptions = ["Apple", "Samsung", "Motorola", "Xiaomi", "Natura", "Avon", "Genérico"];
+const iPhoneModels = [
+  "iPhone 17e",
+  "iPhone 17 Pro Max",
+  "iPhone 17 Pro",
+  "iPhone 17",
+  "iPhone Air",
+  "iPhone 16e",
+  "iPhone 16 Pro Max",
+  "iPhone 16 Pro",
+  "iPhone 16 Plus",
+  "iPhone 16",
+  "iPhone 15 Pro Max",
+  "iPhone 15 Pro",
+  "iPhone 15 Plus",
+  "iPhone 15",
+  "iPhone 14 Pro Max",
+  "iPhone 14 Pro",
+  "iPhone 14 Plus",
+  "iPhone 14",
+  "iPhone SE 3ª geração",
+  "iPhone 13 Pro Max",
+  "iPhone 13 Pro",
+  "iPhone 13",
+  "iPhone 13 mini",
+  "iPhone 12 Pro Max",
+  "iPhone 12 Pro",
+  "iPhone 12",
+  "iPhone 12 mini",
+  "iPhone SE 2ª geração",
+  "iPhone 11 Pro Max",
+  "iPhone 11 Pro",
+  "iPhone 11",
+  "iPhone XS Max",
+  "iPhone XS",
+  "iPhone XR",
+  "iPhone X",
+  "iPhone 8 Plus",
+  "iPhone 8",
+  "iPhone 7 Plus",
+  "iPhone 7",
+];
+const pieceTypes = [
+  "Bateria",
+  "Tela frontal",
+  "Display OLED",
+  "Display LCD/Incell",
+  "Touch",
+  "Vidro frontal",
+  "Tampa traseira",
+  "Vidro traseiro",
+  "Carcaça",
+  "Lente da câmera traseira",
+  "Câmera traseira",
+  "Câmera frontal",
+  "Flex do Face ID",
+  "Flex de carga",
+  "Dock de carga",
+  "Microfone",
+  "Alto-falante auricular",
+  "Alto-falante viva-voz",
+  "Taptic Engine",
+  "Bandeja SIM",
+  "Botão home",
+  "Placa lógica",
+  "Adesivo de vedação da tela",
+  "Película",
+  "Capinha",
+  "Cabo",
+  "Carregador",
+];
+const accessoryModels = ["Cabo Lightning", "Cabo USB-C", "Carregador 20W", "Capinha", "Película"];
+
 const emptyForm = {
   nome: "",
-  categoria: "",
+  categoria: "Produto geral",
   marca: "",
+  modelo: "",
+  tipoPeca: "",
   sku: "",
   codigo_barras: "",
   fornecedor: "",
@@ -63,7 +154,7 @@ const productErrorMessage = (error: unknown) => {
     message.includes("public.products") ||
     message.includes("products")
   ) {
-    return "A tabela de produtos ainda não existe no Supabase. Por enquanto, o app salva os produtos neste navegador; para salvar na nuvem, aplique a migration supabase/migrations/20260513000200_add_products_inventory.sql.";
+    return "A tabela de produtos ainda não existe no Supabase. Por enquanto, o app salva os produtos neste navegador; para salvar na nuvem, aplique as migrations de produtos.";
   }
   return message || "Não foi possível carregar os produtos.";
 };
@@ -71,19 +162,27 @@ const productErrorMessage = (error: unknown) => {
 function ProductsPage() {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [openForm, setOpenForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const formRef = useRef<HTMLDivElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const { data: products = [], isLoading, isError, error, refetch } = useProducts(deferredSearch);
   const upsert = useUpsertProduct();
   const del = useDeleteProduct();
 
+  const stats = useMemo(() => {
+    const totalValue = products.reduce((acc, item) => acc + item.preco_venda * item.quantidade, 0);
+    const lowStock = products.filter((item) => item.quantidade <= item.estoque_minimo).length;
+    const active = products.filter((item) => item.status !== "inativo").length;
+    return { totalValue, lowStock, active };
+  }, [products]);
+
   useEffect(() => {
     if (!editing) return;
     setForm({
+      ...emptyForm,
       nome: editing.nome,
-      categoria: editing.categoria ?? "",
+      categoria: editing.categoria ?? "Produto geral",
       marca: editing.marca ?? "",
       sku: editing.sku ?? "",
       codigo_barras: editing.codigo_barras ?? "",
@@ -102,21 +201,58 @@ function ProductsPage() {
   const reset = () => {
     setEditing(null);
     setForm(emptyForm);
+    setOpenForm(false);
   };
 
   const startNewProduct = () => {
-    reset();
-    window.requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      window.setTimeout(() => nameInputRef.current?.focus(), 280);
-    });
+    setEditing(null);
+    setForm(emptyForm);
+    setOpenForm(true);
+    window.setTimeout(() => nameInputRef.current?.focus(), 180);
   };
 
   const startEditProduct = (product: Product) => {
     setEditing(product);
-    window.requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      window.setTimeout(() => nameInputRef.current?.focus(), 280);
+    setOpenForm(true);
+    window.setTimeout(() => nameInputRef.current?.focus(), 180);
+  };
+
+  const updateCategory = (categoria: string) => {
+    const marca =
+      categoria === "Celular" || categoria === "Peça" || categoria === "Acessório"
+        ? "Apple"
+        : form.marca;
+    setForm({
+      ...form,
+      categoria,
+      marca,
+      modelo: "",
+      tipoPeca: "",
+      estoque_minimo: categoria === "Celular" ? "0" : form.estoque_minimo || "1",
+      garantia_dias:
+        categoria === "Celular" ? "90" : categoria === "Peça" ? "30" : form.garantia_dias,
+    });
+  };
+
+  const updatePreset = (patch: Partial<typeof emptyForm>) => {
+    const next = { ...form, ...patch };
+    const generatedName =
+      next.categoria === "Peça" && next.tipoPeca && next.modelo
+        ? `${next.tipoPeca} ${next.modelo}`
+        : (next.categoria === "Celular" || next.categoria === "Acessório") && next.modelo
+          ? next.modelo
+          : next.nome;
+    setForm({
+      ...next,
+      nome: generatedName,
+      sku: generatedName
+        ? generatedName
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-zA-Z0-9]+/g, "-")
+            .replace(/^-|-$/g, "")
+            .toUpperCase()
+        : next.sku,
     });
   };
 
@@ -188,40 +324,349 @@ function ProductsPage() {
           </Button>
         </div>
 
-        <div ref={formRef} className="scroll-mt-6 rounded-[22px] bg-surface p-4 shadow-soft sm:p-5">
-          <div className="mb-5 flex items-center gap-2 text-sm font-semibold">
-            <PackagePlus className="h-4 w-4 text-primary" />
-            {editing ? "Editar produto completo" : "Cadastro completo de produto"}
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-[22px] bg-surface p-5 shadow-soft">
+            <p className="text-xs text-muted-foreground">Produtos ativos</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{stats.active}</p>
+          </div>
+          <div className="rounded-[22px] bg-surface p-5 shadow-soft">
+            <p className="text-xs text-muted-foreground">Valor em estoque</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{brl(stats.totalValue)}</p>
+          </div>
+          <div className="rounded-[22px] bg-[#062b35] p-5 text-white shadow-soft">
+            <p className="text-xs text-white/70">Estoque baixo</p>
+            <p className="mt-2 text-2xl font-semibold">{stats.lowStock}</p>
+          </div>
+        </div>
+
+        <div className="rounded-[22px] bg-surface p-4 shadow-soft sm:p-5">
+          <div className="relative mb-4 w-full sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nome ou código"
+              className="pl-9"
+            />
           </div>
 
-          <div className="grid gap-5">
+          <div className="hidden md:block">
+            <table className="w-full table-fixed text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-[11px] uppercase text-muted-foreground">
+                  <th className="w-[30%] py-2 font-medium">Produto</th>
+                  <th className="w-[14%] py-2 font-medium">Categoria</th>
+                  <th className="w-[18%] py-2 font-medium">Código</th>
+                  <th className="w-[14%] py-2 font-medium text-right">Preço</th>
+                  <th className="w-[12%] py-2 font-medium text-right">Estoque</th>
+                  <th className="w-[12%] py-2 font-medium text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading && (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-muted-foreground">
+                      Carregando...
+                    </td>
+                  </tr>
+                )}
+                {isError && (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center">
+                      <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-warning">
+                        <strong>Cadastro de produtos ainda não está conectado ao banco.</strong>
+                        <p className="text-sm leading-relaxed text-foreground">
+                          {productErrorMessage(error)}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-xl bg-white"
+                          onClick={() => refetch()}
+                        >
+                          Tentar novamente
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && !isError && products.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                      Nenhum produto cadastrado.
+                    </td>
+                  </tr>
+                )}
+                {products.map((product) => {
+                  const lowStock = product.quantidade <= product.estoque_minimo;
+                  return (
+                    <tr key={product.id} className="border-b border-border/60 hover:bg-muted/30">
+                      <td className="truncate py-3 pr-3 font-medium">{product.nome}</td>
+                      <td className="truncate py-3 pr-3 text-muted-foreground">
+                        {product.categoria || "-"}
+                      </td>
+                      <td className="truncate py-3 pr-3 text-muted-foreground">
+                        {product.sku || product.codigo_barras || "-"}
+                      </td>
+                      <td className="py-3 text-right">{brl(product.preco_venda)}</td>
+                      <td className="py-3 text-right">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            lowStock
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-success/10 text-success"
+                          }`}
+                        >
+                          {product.quantidade} un.
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => startEditProduct(product)}
+                            className="motion-pop grid h-8 w-8 place-items-center rounded-full bg-muted hover:bg-muted/70"
+                            title="Editar"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => askDelete(product)}
+                            className="motion-pop grid h-8 w-8 place-items-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20"
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid gap-3 md:hidden">
+            {isLoading && (
+              <div className="rounded-2xl border border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                Carregando...
+              </div>
+            )}
+            {isError && (
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-center text-warning">
+                <strong>Cadastro de produtos ainda não está conectado ao banco.</strong>
+                <p className="text-sm leading-relaxed text-foreground">
+                  {productErrorMessage(error)}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-xl bg-white"
+                  onClick={() => refetch()}
+                >
+                  Tentar novamente
+                </Button>
+              </div>
+            )}
+            {!isLoading && !isError && products.length === 0 && (
+              <div className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                Nenhum produto cadastrado.
+              </div>
+            )}
+            {products.map((product) => {
+              const lowStock = product.quantidade <= product.estoque_minimo;
+              return (
+                <div
+                  key={product.id}
+                  className="rounded-2xl border border-border bg-surface px-4 py-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {product.nome}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {product.categoria || "Sem categoria"} • {product.sku || "Sem código"}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        lowStock
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-success/10 text-success"
+                      }`}
+                    >
+                      {product.quantidade} un.
+                    </span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-base font-semibold text-foreground">
+                      {brl(product.preco_venda)}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => startEditProduct(product)}
+                        className="motion-pop grid h-9 w-9 place-items-center rounded-full bg-muted hover:bg-muted/70"
+                        title="Editar"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => askDelete(product)}
+                        className="motion-pop grid h-9 w-9 place-items-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20"
+                        title="Excluir"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <Dialog open={openForm} onOpenChange={(open) => (open ? setOpenForm(true) : reset())}>
+        <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[760px] sm:rounded-2xl">
+          <DialogHeader className="border-b border-border/70 px-5 pb-4 pt-5 sm:px-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+              <PackagePlus className="h-5 w-5 text-primary" />
+            </div>
+            <DialogTitle className="text-[19px] leading-tight">
+              {editing ? "Editar produto completo" : "Cadastrar produto completo"}
+            </DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
+              Selecione categoria, marca e modelo para o Fiado preencher o produto mais rápido.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-5 px-5 py-5 sm:px-6">
             <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
               <h2 className="text-sm font-semibold text-foreground">Dados gerais</h2>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.3fr_0.8fr_0.8fr]">
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Categoria *">
+                  <Select value={form.categoria} onValueChange={updateCategory}>
+                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {productCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Marca">
+                  <Select
+                    value={form.marca || undefined}
+                    onValueChange={(marca) => setForm({ ...form, marca })}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                      <SelectValue placeholder="Selecionar marca" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {brandOptions.map((brand) => (
+                        <SelectItem key={brand} value={brand}>
+                          {brand}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {form.categoria === "Peça" && (
+                  <Field label="Tipo de peça">
+                    <Select
+                      value={form.tipoPeca || undefined}
+                      onValueChange={(tipoPeca) => updatePreset({ tipoPeca })}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl bg-background">
+                        <SelectValue placeholder="Selecionar peça" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pieceTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+              </div>
+
+              {(form.categoria === "Celular" || form.categoria === "Peça") &&
+                form.marca === "Apple" && (
+                  <Field
+                    label={form.categoria === "Peça" ? "Modelo compatível" : "Modelo do iPhone"}
+                  >
+                    <Select
+                      value={form.modelo || undefined}
+                      onValueChange={(modelo) => updatePreset({ modelo })}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl bg-background">
+                        <SelectValue placeholder="Selecionar modelo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {iPhoneModels.map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+
+              {form.categoria === "Acessório" && (
+                <Field label="Preset de acessório">
+                  <Select
+                    value={form.modelo || undefined}
+                    onValueChange={(modelo) => updatePreset({ modelo })}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                      <SelectValue placeholder="Selecionar acessório" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accessoryModels.map((model) => (
+                        <SelectItem key={model} value={model}>
+                          {model}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Nome do produto *">
                   <Input
                     ref={nameInputRef}
                     value={form.nome}
                     onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                    placeholder="Ex: Perfume 123, Tela iPhone 11, Camiseta..."
+                    placeholder="Ex: Bateria iPhone 11"
                   />
                 </Field>
-                <Field label="Categoria">
-                  <Input
-                    value={form.categoria}
-                    onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-                    placeholder="Ex: Celular, Peça, Acessório"
-                  />
-                </Field>
-                <Field label="Marca">
-                  <Input
-                    value={form.marca}
-                    onChange={(e) => setForm({ ...form, marca: e.target.value })}
-                    placeholder="Ex: Apple, Natura"
-                  />
+                <Field label="Status">
+                  <Select
+                    value={form.status}
+                    onValueChange={(status) => setForm({ ...form, status })}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ativo">Ativo</SelectItem>
+                      <SelectItem value="reservado">Reservado</SelectItem>
+                      <SelectItem value="inativo">Inativo</SelectItem>
+                      <SelectItem value="defeituoso">Defeituoso</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Field>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+
+              <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Código/SKU">
                   <Input
                     value={form.sku}
@@ -235,18 +680,6 @@ function ProductsPage() {
                     onChange={(e) => setForm({ ...form, codigo_barras: e.target.value })}
                     placeholder="EAN, UPC ou código manual"
                   />
-                </Field>
-                <Field label="Status">
-                  <select
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                    className="h-10 rounded-xl border border-border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="ativo">Ativo</option>
-                    <option value="reservado">Reservado</option>
-                    <option value="inativo">Inativo</option>
-                    <option value="defeituoso">Defeituoso</option>
-                  </select>
                 </Field>
               </div>
             </div>
@@ -340,206 +773,22 @@ function ProductsPage() {
                 className="min-h-[96px] rounded-xl bg-background"
               />
             </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              {editing && (
-                <Button variant="ghost" className="h-11 rounded-xl px-5" onClick={reset}>
-                  Cancelar
-                </Button>
-              )}
-              <Button className="h-11 rounded-xl px-5" onClick={submit} disabled={upsert.isPending}>
-                {upsert.isPending
-                  ? "Salvando..."
-                  : editing
-                    ? "Atualizar produto"
-                    : "Cadastrar produto"}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-[22px] bg-surface p-4 shadow-soft sm:p-5">
-          <div className="relative mb-4 w-full sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome ou código"
-              className="pl-9"
-            />
           </div>
 
-          <div className="hidden md:block">
-            <table className="w-full table-fixed text-[13px]">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase text-muted-foreground">
-                  <th className="w-[34%] py-2 font-medium">Produto</th>
-                  <th className="w-[20%] py-2 font-medium">Código</th>
-                  <th className="w-[16%] py-2 font-medium text-right">Preço</th>
-                  <th className="w-[15%] py-2 font-medium text-right">Estoque</th>
-                  <th className="w-[15%] py-2 font-medium text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading && (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-muted-foreground">
-                      Carregando...
-                    </td>
-                  </tr>
-                )}
-                {isError && (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center">
-                      <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-warning">
-                        <strong>Cadastro de produtos ainda não está conectado ao banco.</strong>
-                        <p className="text-sm leading-relaxed text-foreground">
-                          {productErrorMessage(error)}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-xl bg-white"
-                          onClick={() => refetch()}
-                        >
-                          Tentar novamente
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                {!isLoading && !isError && products.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-10 text-center text-muted-foreground">
-                      Nenhum produto cadastrado.
-                    </td>
-                  </tr>
-                )}
-                {products.map((product) => {
-                  const lowStock = product.quantidade <= product.estoque_minimo;
-                  return (
-                    <tr key={product.id} className="border-b border-border/60 hover:bg-muted/30">
-                      <td className="truncate py-3 pr-3 font-medium">{product.nome}</td>
-                      <td className="truncate py-3 pr-3 text-muted-foreground">
-                        {product.sku || "-"}
-                      </td>
-                      <td className="py-3 text-right">{brl(product.preco_venda)}</td>
-                      <td className="py-3 text-right">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            lowStock
-                              ? "bg-destructive/10 text-destructive"
-                              : "bg-success/10 text-success"
-                          }`}
-                        >
-                          {product.quantidade} un.
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <div className="flex justify-end gap-1.5">
-                          <button
-                            onClick={() => startEditProduct(product)}
-                            className="motion-pop grid h-8 w-8 place-items-center rounded-full bg-muted hover:bg-muted/70"
-                            title="Editar"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => askDelete(product)}
-                            className="motion-pop grid h-8 w-8 place-items-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20"
-                            title="Excluir"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="grid gap-3 md:hidden">
-            {isLoading && (
-              <div className="rounded-2xl border border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Carregando...
-              </div>
-            )}
-            {isError && (
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-center text-warning">
-                <strong>Cadastro de produtos ainda não está conectado ao banco.</strong>
-                <p className="text-sm leading-relaxed text-foreground">
-                  {productErrorMessage(error)}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 rounded-xl bg-white"
-                  onClick={() => refetch()}
-                >
-                  Tentar novamente
-                </Button>
-              </div>
-            )}
-            {!isLoading && !isError && products.length === 0 && (
-              <div className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                Nenhum produto cadastrado.
-              </div>
-            )}
-            {products.map((product) => {
-              const lowStock = product.quantidade <= product.estoque_minimo;
-              return (
-                <div
-                  key={product.id}
-                  className="rounded-2xl border border-border bg-surface px-4 py-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {product.nome}
-                      </p>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
-                        {product.sku || "Sem código"}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        lowStock
-                          ? "bg-destructive/10 text-destructive"
-                          : "bg-success/10 text-success"
-                      }`}
-                    >
-                      {product.quantidade} un.
-                    </span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-base font-semibold text-foreground">
-                      {brl(product.preco_venda)}
-                    </span>
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => startEditProduct(product)}
-                        className="motion-pop grid h-9 w-9 place-items-center rounded-full bg-muted hover:bg-muted/70"
-                        title="Editar"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => askDelete(product)}
-                        className="motion-pop grid h-9 w-9 place-items-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20"
-                        title="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+          <DialogFooter className="gap-2 border-t border-border/70 bg-surface-muted/60 px-5 py-4 sm:px-6">
+            <Button variant="ghost" className="h-11 rounded-xl px-5" onClick={reset}>
+              Cancelar
+            </Button>
+            <Button className="h-11 rounded-xl px-5" onClick={submit} disabled={upsert.isPending}>
+              {upsert.isPending
+                ? "Salvando..."
+                : editing
+                  ? "Atualizar produto"
+                  : "Cadastrar produto"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
