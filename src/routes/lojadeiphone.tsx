@@ -225,6 +225,19 @@ type StockProductForm = {
   tributacao: string;
 };
 
+type ImeiCheckResult = {
+  imei: string;
+  checkedAt: string;
+  certificateId: string;
+  source: "IMEI.EU API" | "Pre-check local";
+  status: "Aprovado" | "Atencao" | "Pre-check";
+  brand?: string;
+  model?: string;
+  name?: string;
+  blacklisted?: boolean | null;
+  notes: string[];
+};
+
 const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
   { id: "celulares", label: "Celulares", icon: Smartphone },
@@ -707,6 +720,12 @@ function LojaDeIphonePage() {
   const [newPhone, setNewPhone] = useState({ modelo: "iPhone 11", capacidade: "128GB", cor: "" });
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
   const [stockProduct, setStockProduct] = useState<StockProductForm>(emptyStockProductForm);
+  const [imeiQuery, setImeiQuery] = useState("");
+  const [imeiApiKey, setImeiApiKey] = useState(() =>
+    typeof window === "undefined" ? "" : localStorage.getItem("fiado-imei-api-key") || "",
+  );
+  const [imeiResult, setImeiResult] = useState<ImeiCheckResult | null>(null);
+  const [checkingImei, setCheckingImei] = useState(false);
   const [newService, setNewService] = useState({
     cliente: "",
     modelo: "iPhone 11",
@@ -882,6 +901,116 @@ function LojaDeIphonePage() {
     };
     setPhones((items) => [phone, ...items]);
     toast.success("Celular cadastrado");
+  }
+
+  async function lookupImei() {
+    const imei = onlyDigits(imeiQuery);
+    if (!isValidImei(imei)) {
+      toast.error("IMEI invalido. Confira os 15 digitos antes de consultar.");
+      return;
+    }
+
+    setCheckingImei(true);
+    const baseResult: ImeiCheckResult = {
+      imei,
+      checkedAt: new Date().toLocaleString("pt-BR"),
+      certificateId: `FIADO-${imei.slice(-6)}-${Date.now().toString().slice(-4)}`,
+      source: "Pre-check local",
+      status: "Pre-check",
+      blacklisted: null,
+      notes: [
+        "IMEI passou na validacao matematica Luhn.",
+        "Para procedencia completa, configure uma chave de API IMEI.EU.",
+      ],
+    };
+
+    try {
+      if (!imeiApiKey.trim()) {
+        setImeiResult(baseResult);
+        toast.success("Pre-check gerado. Adicione uma chave para consultar procedencia online.");
+        return;
+      }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("fiado-imei-api-key", imeiApiKey.trim());
+      }
+
+      const deviceParams = new URLSearchParams({
+        key: imeiApiKey.trim(),
+        imei,
+        service: "2",
+      });
+      const blacklistParams = new URLSearchParams({
+        key: imeiApiKey.trim(),
+        imei,
+        service: "3",
+      });
+
+      const [deviceResponse, blacklistResponse] = await Promise.all([
+        fetch(`https://api.imei.eu/?${deviceParams.toString()}`),
+        fetch(`https://api.imei.eu/?${blacklistParams.toString()}`),
+      ]);
+      const [deviceJson, blacklistJson] = await Promise.all([
+        deviceResponse.json(),
+        blacklistResponse.json(),
+      ]);
+
+      if (deviceJson.status !== "ok") {
+        throw new Error(deviceJson.error || "consulta de modelo recusada");
+      }
+      if (blacklistJson.status !== "ok") {
+        throw new Error(blacklistJson.error || "consulta de blacklist recusada");
+      }
+
+      const blacklisted = Boolean(blacklistJson.data?.blacklisted);
+      const result: ImeiCheckResult = {
+        ...baseResult,
+        source: "IMEI.EU API",
+        status: blacklisted ? "Atencao" : "Aprovado",
+        brand: deviceJson.data?.brand,
+        model: deviceJson.data?.model,
+        name: deviceJson.data?.name,
+        blacklisted,
+        notes: [
+          `Marca/modelo retornado pela API: ${[deviceJson.data?.brand, deviceJson.data?.name, deviceJson.data?.model].filter(Boolean).join(" ") || "nao informado"}.`,
+          blacklisted
+            ? "A API marcou este IMEI como blacklist. Nao recomendo compra/venda sem auditoria manual."
+            : "A API nao retornou blacklist para este IMEI.",
+        ],
+      };
+
+      setImeiResult(result);
+      toast.success(blacklisted ? "Consulta concluida com alerta" : "IMEI aprovado na consulta");
+    } catch (error) {
+      setImeiResult({
+        ...baseResult,
+        notes: [
+          ...baseResult.notes,
+          `A API nao respondeu nesta tentativa: ${error instanceof Error ? error.message : "erro desconhecido"}.`,
+        ],
+      });
+      toast.error("Nao consegui consultar a API agora. Gere o pre-check e tente novamente.");
+    } finally {
+      setCheckingImei(false);
+    }
+  }
+
+  function generateImeiCertificate() {
+    if (!imeiResult) {
+      toast.error("Consulte um IMEI antes de gerar o certificado");
+      return;
+    }
+
+    const html = buildImeiCertificateHtml(imeiResult, firstName);
+    const certificateWindow = window.open("", "_blank", "width=920,height=720");
+    if (!certificateWindow) {
+      toast.error("Permita pop-ups para gerar o certificado");
+      return;
+    }
+    certificateWindow.document.write(html);
+    certificateWindow.document.close();
+    certificateWindow.focus();
+    certificateWindow.print();
   }
 
   function addPart() {
@@ -1217,29 +1346,46 @@ function LojaDeIphonePage() {
             )}
 
             {active === "celulares" && (
-              <ModuleCard
-                title="Cadastro rÃƒÂ¡pido de celular"
-                icon={Smartphone}
-                action={<Button onClick={addPhone}>Cadastrar celular</Button>}
-              >
-                <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
-                  <SelectLike
-                    value={newPhone.modelo}
-                    onChange={(value) => setNewPhone({ ...newPhone, modelo: value })}
-                    options={iphoneModels}
-                  />
-                  <SelectLike
-                    value={newPhone.capacidade}
-                    onChange={(value) => setNewPhone({ ...newPhone, capacidade: value })}
-                    options={["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"]}
-                  />
-                  <Input
-                    placeholder="Cor"
-                    value={newPhone.cor}
-                    onChange={(event) => setNewPhone({ ...newPhone, cor: event.target.value })}
-                  />
-                </div>
-              </ModuleCard>
+              <>
+                <ImeiLookupCard
+                  imei={imeiQuery}
+                  apiKey={imeiApiKey}
+                  checking={checkingImei}
+                  result={imeiResult}
+                  onImeiChange={setImeiQuery}
+                  onApiKeyChange={(value) => {
+                    setImeiApiKey(value);
+                    if (typeof window !== "undefined") {
+                      localStorage.setItem("fiado-imei-api-key", value);
+                    }
+                  }}
+                  onLookup={lookupImei}
+                  onCertificate={generateImeiCertificate}
+                />
+                <ModuleCard
+                  title="Cadastro rÃƒÂ¡pido de celular"
+                  icon={Smartphone}
+                  action={<Button onClick={addPhone}>Cadastrar celular</Button>}
+                >
+                  <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
+                    <SelectLike
+                      value={newPhone.modelo}
+                      onChange={(value) => setNewPhone({ ...newPhone, modelo: value })}
+                      options={iphoneModels}
+                    />
+                    <SelectLike
+                      value={newPhone.capacidade}
+                      onChange={(value) => setNewPhone({ ...newPhone, capacidade: value })}
+                      options={["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"]}
+                    />
+                    <Input
+                      placeholder="Cor"
+                      value={newPhone.cor}
+                      onChange={(event) => setNewPhone({ ...newPhone, cor: event.target.value })}
+                    />
+                  </div>
+                </ModuleCard>
+              </>
             )}
 
             {active === "celulares" && (
@@ -1973,6 +2119,153 @@ function SettingsView() {
         </div>
       </DataCard>
     </div>
+  );
+}
+
+function ImeiLookupCard({
+  imei,
+  apiKey,
+  checking,
+  result,
+  onImeiChange,
+  onApiKeyChange,
+  onLookup,
+  onCertificate,
+}: {
+  imei: string;
+  apiKey: string;
+  checking: boolean;
+  result: ImeiCheckResult | null;
+  onImeiChange: (value: string) => void;
+  onApiKeyChange: (value: string) => void;
+  onLookup: () => void;
+  onCertificate: () => void;
+}) {
+  const normalized = onlyDigits(imei);
+  const valid = isValidImei(normalized);
+
+  return (
+    <section className="mb-4 rounded-[24px] bg-surface p-4 shadow-soft sm:p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <ShieldCheck className="h-5 w-5" strokeWidth={1.8} />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              Consulta de IMEI e certificado
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+              Valida o IMEI, consulta marca/modelo e blacklist pela API IMEI.EU quando houver chave,
+              e gera um certificado de procedencia para o aparelho.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onLookup} disabled={checking} className="rounded-full">
+            {checking ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            Consultar IMEI
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCertificate}
+            disabled={!result}
+            className="rounded-full"
+          >
+            <FileText className="h-4 w-4" />
+            Gerar certificado
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+          IMEI do aparelho
+          <Input
+            value={imei}
+            inputMode="numeric"
+            maxLength={19}
+            placeholder="Digite os 15 digitos do IMEI"
+            onChange={(event) => onImeiChange(event.target.value)}
+            className="h-11 rounded-2xl bg-surface-muted"
+          />
+          <span className={valid ? "text-success" : "text-muted-foreground"}>
+            {normalized.length === 15
+              ? valid
+                ? "IMEI valido pelo algoritmo Luhn"
+                : "IMEI com digito verificador invalido"
+              : `${normalized.length}/15 digitos`}
+          </span>
+        </Label>
+
+        <Label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+          Chave da API IMEI.EU
+          <Input
+            value={apiKey}
+            type="password"
+            placeholder="Cole sua API key gratuita/teste aqui"
+            onChange={(event) => onApiKeyChange(event.target.value)}
+            className="h-11 rounded-2xl bg-surface-muted"
+          />
+          <span>Sem chave, o sistema gera apenas pre-check local e certificado manual.</span>
+        </Label>
+      </div>
+
+      {result && (
+        <div className="mt-4 grid gap-3 xl:grid-cols-[0.8fr_1.2fr]">
+          <div
+            className={`rounded-[22px] p-4 ${
+              result.status === "Aprovado"
+                ? "bg-success/10 text-success"
+                : result.status === "Atencao"
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-primary/10 text-primary"
+            }`}
+          >
+            <p className="text-xs font-medium opacity-80">Status da procedencia</p>
+            <strong className="mt-2 block text-[26px] leading-none font-semibold">
+              {result.status}
+            </strong>
+            <p className="mt-3 text-xs opacity-80">Fonte: {result.source}</p>
+            <p className="mt-1 text-xs opacity-80">Certificado: {result.certificateId}</p>
+          </div>
+
+          <div className="grid gap-2 rounded-[22px] bg-surface-muted p-4 text-sm">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="IMEI consultado" value={result.imei} />
+              <Field label="Data da consulta" value={result.checkedAt} />
+              <Field label="Marca" value={result.brand || "Nao informado"} />
+              <Field label="Modelo" value={result.name || result.model || "Nao informado"} />
+              <Field
+                label="Blacklist"
+                value={
+                  result.blacklisted === null
+                    ? "Nao consultado"
+                    : result.blacklisted
+                      ? "Com alerta"
+                      : "Sem alerta"
+                }
+              />
+              <Field label="Origem" value={result.source} />
+            </div>
+            <div className="mt-2 rounded-2xl bg-surface p-3">
+              <p className="mb-2 text-xs font-semibold text-foreground">Notas da verificacao</p>
+              <ul className="grid gap-1 text-xs text-muted-foreground">
+                {result.notes.map((note) => (
+                  <li key={note}>- {note}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -2862,6 +3155,107 @@ function stockStatus(quantity: number, minQuantity: number) {
         ? "Baixo estoque"
         : "Disponivel"
   ) as Part["status"];
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function isValidImei(value: string) {
+  if (!/^\d{15}$/.test(value)) return false;
+  const sum = value
+    .split("")
+    .map(Number)
+    .reduce((acc, digit, index) => {
+      if (index % 2 === 0) return acc + digit;
+      const doubled = digit * 2;
+      return acc + (doubled > 9 ? doubled - 9 : doubled);
+    }, 0);
+  return sum % 10 === 0;
+}
+
+function buildImeiCertificateHtml(result: ImeiCheckResult, operator: string) {
+  const statusColor =
+    result.status === "Aprovado" ? "#16a34a" : result.status === "Atencao" ? "#dc2626" : "#5b55ff";
+  const blacklist =
+    result.blacklisted === null
+      ? "Nao consultado"
+      : result.blacklisted
+        ? "Com alerta"
+        : "Sem alerta";
+  const brand = escapeHtml(result.brand || "Nao informado");
+  const model = escapeHtml(result.name || result.model || "Nao informado");
+  const notes = result.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("");
+
+  return `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Certificado IMEI ${escapeHtml(result.imei)}</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 40px; font-family: Inter, Arial, sans-serif; background: #f5f6fa; color: #111827; }
+      .sheet { max-width: 820px; margin: 0 auto; border-radius: 28px; background: #fff; padding: 42px; box-shadow: 0 24px 80px rgba(17, 24, 39, .12); }
+      .top { display: flex; justify-content: space-between; gap: 24px; border-bottom: 1px solid #e5e7eb; padding-bottom: 24px; }
+      .brand { font-size: 22px; font-weight: 800; color: #5b55ff; }
+      .badge { border-radius: 999px; background: ${statusColor}; color: #fff; padding: 10px 16px; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+      h1 { margin: 34px 0 8px; font-size: 34px; line-height: 1.05; }
+      p { color: #6b7280; line-height: 1.6; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+      .field { border-radius: 18px; background: #f3f4f6; padding: 16px; }
+      .label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+      .value { margin-top: 8px; font-weight: 800; }
+      .notes { margin-top: 24px; border-radius: 20px; border: 1px solid #e5e7eb; padding: 18px; }
+      li { margin: 8px 0; color: #4b5563; }
+      .footer { margin-top: 34px; display: flex; justify-content: space-between; color: #6b7280; font-size: 12px; }
+      @media print { body { background: #fff; padding: 0; } .sheet { box-shadow: none; } }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <div class="top">
+        <div>
+          <div class="brand">Fiado.</div>
+          <p>Certificado de consulta e procedencia de aparelho</p>
+        </div>
+        <div class="badge">${escapeHtml(result.status)}</div>
+      </div>
+      <h1>Certificado IMEI</h1>
+      <p>Este documento registra a consulta feita no sistema Fiado para apoio na compra, venda ou assistencia tecnica do aparelho.</p>
+      <section class="grid">
+        <div class="field"><div class="label">Certificado</div><div class="value">${escapeHtml(result.certificateId)}</div></div>
+        <div class="field"><div class="label">IMEI</div><div class="value">${escapeHtml(result.imei)}</div></div>
+        <div class="field"><div class="label">Fonte</div><div class="value">${escapeHtml(result.source)}</div></div>
+        <div class="field"><div class="label">Data</div><div class="value">${escapeHtml(result.checkedAt)}</div></div>
+        <div class="field"><div class="label">Marca</div><div class="value">${brand}</div></div>
+        <div class="field"><div class="label">Modelo</div><div class="value">${model}</div></div>
+        <div class="field"><div class="label">Blacklist</div><div class="value">${escapeHtml(blacklist)}</div></div>
+        <div class="field"><div class="label">Operador</div><div class="value">${escapeHtml(operator)}</div></div>
+      </section>
+      <section class="notes">
+        <strong>Notas da verificacao</strong>
+        <ul>${notes}</ul>
+      </section>
+      <div class="footer">
+        <span>Fiado SaaS - Loja de iPhone</span>
+        <span>Documento gerado automaticamente</span>
+      </div>
+    </main>
+  </body>
+</html>`;
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[char] ?? char;
+  });
 }
 
 function matchesFilters(fields: unknown[], query: string, statusFilter: string, status: string) {
