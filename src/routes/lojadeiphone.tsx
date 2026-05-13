@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 import { brl } from "@/lib/format";
 
 export const Route = createFileRoute("/lojadeiphone")({
@@ -88,6 +89,7 @@ type ServiceStatus =
 
 type Phone = {
   id: number;
+  productId?: string;
   modelo: string;
   linha: string;
   capacidade: string;
@@ -112,6 +114,7 @@ type Phone = {
 
 type Part = {
   id: number;
+  productId?: string;
   tipo: string;
   modelo: string;
   qualidade: string;
@@ -287,6 +290,31 @@ type StockProductForm = {
   cfopEntradaInterestadual: string;
   tributacao: string;
 };
+
+type InventoryProductRow = {
+  id: string;
+  nome: string;
+  sku: string | null;
+  preco_venda: number;
+  quantidade: number;
+  estoque_minimo: number;
+  status: string;
+  observacoes: string | null;
+};
+
+type LojaInventoryMeta =
+  | {
+      app: "lojadeiphone";
+      version: 1;
+      kind: "phone";
+      data: Omit<Phone, "id" | "productId">;
+    }
+  | {
+      app: "lojadeiphone";
+      version: 1;
+      kind: "part";
+      data: Omit<Part, "id" | "productId">;
+    };
 
 type ImeiCheckResult = {
   imei: string;
@@ -941,6 +969,7 @@ function LojaDeIphonePage() {
   const [categoryFilter, setCategoryFilter] = useState("Todos");
   const [phones, setPhones] = useState<Phone[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
   const [services, setServices] = useState<ServiceOrder[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -1002,6 +1031,47 @@ function LojaDeIphonePage() {
     user?.user_metadata?.nome?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "Andre";
   const email = user?.email ?? "andre@lojaiphone.com";
   const initials = firstName.slice(0, 1).toUpperCase();
+  const userId = user?.id;
+
+  useEffect(() => {
+    if (!userId) return;
+
+    let activeRequest = true;
+    setInventoryLoading(true);
+
+    supabase
+      .from("products")
+      .select("id,nome,sku,preco_venda,quantidade,estoque_minimo,status,observacoes")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (!activeRequest) return;
+        if (error) {
+          toast.error("Nao consegui carregar o estoque salvo da sua conta");
+          return;
+        }
+
+        const rows = (data ?? []) as InventoryProductRow[];
+        const loadedPhones: Phone[] = [];
+        const loadedParts: Part[] = [];
+
+        rows.forEach((row) => {
+          const parsed = parseInventoryProduct(row);
+          if (!parsed) return;
+          if (parsed.kind === "phone") loadedPhones.push(parsed.item);
+          if (parsed.kind === "part") loadedParts.push(parsed.item);
+        });
+
+        setPhones(loadedPhones);
+        setParts(loadedParts);
+      })
+      .finally(() => {
+        if (activeRequest) setInventoryLoading(false);
+      });
+
+    return () => {
+      activeRequest = false;
+    };
+  }, [userId]);
 
   const totals = useMemo(() => {
     const totalVendido = sales.reduce(
@@ -1499,7 +1569,12 @@ function LojaDeIphonePage() {
     toast.success("Peça cadastrada");
   }
 
-  function saveStockProduct() {
+  async function saveStockProduct() {
+    if (!user) {
+      toast.error("Entre na sua conta para salvar no banco de dados");
+      return;
+    }
+
     const quantity = Math.max(0, Number(stockProduct.quantidade) || 0);
     const minQuantity = Math.max(0, Number(stockProduct.quantidadeMinima) || 0);
     const cost = moneyToNumber(stockProduct.valorCusto);
@@ -1546,7 +1621,20 @@ function LojaDeIphonePage() {
         status: "Disponível" as PhoneStatus,
         observacoes: stockProduct.observacao || "Cadastrado pelo estoque completo.",
       };
-      setPhones((items) => [phone, ...items]);
+      const savedPhone = await saveLojaInventoryProduct({
+        userId: user.id,
+        kind: "phone",
+        name: `${phone.modelo} ${phone.capacidade} ${phone.cor}`.trim(),
+        sku: phone.imei || phone.serial,
+        salePrice: phone.precoVenda,
+        quantity: 1,
+        minimum: 0,
+        status: phone.status,
+        data: phone,
+      });
+      if (!savedPhone) return;
+
+      setPhones((items) => [savedPhone as Phone, ...items]);
       toast.success("Aparelho cadastrado no estoque");
     } else {
       const part: Part = {
@@ -1567,7 +1655,20 @@ function LojaDeIphonePage() {
         garantia: warranty,
         status: stockStatus(quantity, minQuantity),
       };
-      setParts((items) => [part, ...items]);
+      const savedPart = await saveLojaInventoryProduct({
+        userId: user.id,
+        kind: "part",
+        name: `${part.tipo} ${part.modelo}`.trim(),
+        sku: part.sku,
+        salePrice: part.preco,
+        quantity: part.quantidade,
+        minimum: part.minimo,
+        status: part.status,
+        data: part,
+      });
+      if (!savedPart) return;
+
+      setParts((items) => [savedPart as Part, ...items]);
       toast.success(stockProduct.kind === "Acessório" ? "Acessório cadastrado" : "Peça cadastrada");
     }
 
@@ -1997,6 +2098,22 @@ function LojaDeIphonePage() {
     toast.success("Item excluído");
   }
 
+  async function removeInventoryById<T extends { id: number; productId?: string }>(
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    item: T,
+  ) {
+    if (item.productId) {
+      const { error } = await supabase.from("products").delete().eq("id", item.productId);
+      if (error) {
+        toast.error("Nao consegui excluir do banco da sua conta");
+        return;
+      }
+    }
+
+    setter((items) => items.filter((current) => current.id !== item.id));
+    toast.success("Item excluido");
+  }
+
   function markChargePaid(id: number, installmentId?: number | null) {
     setSales((items) =>
       items.map((item) => {
@@ -2228,7 +2345,10 @@ function LojaDeIphonePage() {
                     `${brl(phone.custoCompra + phone.custoManutencao)}`,
                     brl(phone.precoVenda),
                     <StatusPill key="status" status={phone.status} />,
-                    <Actions key="actions" onDelete={() => removeById(setPhones, phone.id)} />,
+                    <Actions
+                      key="actions"
+                      onDelete={() => void removeInventoryById(setPhones, phone)}
+                    />,
                   ])}
                 />
               </DataCard>
@@ -2260,7 +2380,10 @@ function LojaDeIphonePage() {
                       `${part.quantidade} un. • mínimo ${part.minimo}`,
                       `${part.garantia} dias`,
                       <StockPill key="status" part={part} />,
-                      <Actions key="actions" onDelete={() => removeById(setParts, part.id)} />,
+                      <Actions
+                        key="actions"
+                        onDelete={() => void removeInventoryById(setParts, part)}
+                      />,
                     ])}
                   />
                 </DataCard>
@@ -2932,7 +3055,9 @@ function LojaDeIphonePage() {
               </>
             )}
 
-            {active === "estoque" && <StockView phones={phones} parts={parts} totals={totals} />}
+            {active === "estoque" && (
+              <StockView phones={phones} parts={parts} totals={totals} loading={inventoryLoading} />
+            )}
             {active === "relatorios" && (
               <ReportsView
                 sales={sales}
@@ -3231,14 +3356,34 @@ function StockView({
   phones,
   parts,
   totals,
+  loading,
 }: {
   phones: Phone[];
   parts: Part[];
   totals: ReturnType<typeof computeTotalsShape>;
+  loading: boolean;
 }) {
   const accessoryStock = parts.filter((item) =>
     ["Película", "Capinha", "Cabo", "Carregador"].includes(item.tipo),
   );
+  const rows = [
+    ...phones
+      .filter((phone) => phone.status !== "Vendido")
+      .map((phone) => [
+        "Celular",
+        `${phone.modelo} ${phone.capacidade} ${phone.cor}`.trim(),
+        "1 un.",
+        phone.imei ? `IMEI ${phone.imei}` : phone.serial || "Sem IMEI",
+        <StatusPill key={`phone-${phone.id}`} status={phone.status} />,
+      ]),
+    ...parts.map((part) => [
+      part.tipo,
+      `${part.tipo} ${part.modelo}`,
+      `${part.quantidade} un.`,
+      part.localizacao,
+      <StockPill key={`part-${part.id}`} part={part} />,
+    ]),
+  ];
   return (
     <div className="motion-list flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -3271,13 +3416,7 @@ function StockView({
       <DataCard title="Movimentação e alertas">
         <ResponsiveTable
           columns={["Tipo", "Item", "Estoque", "Local", "Status"]}
-          rows={parts.map((part) => [
-            part.tipo,
-            `${part.tipo} ${part.modelo}`,
-            `${part.quantidade} un.`,
-            part.localizacao,
-            <StockPill key="status" part={part} />,
-          ])}
+          rows={loading ? [["Carregando...", "Estoque da sua conta", "", "", ""]] : rows}
         />
       </DataCard>
     </div>
@@ -3537,7 +3676,7 @@ function StockProductFormCard({
   id?: string;
   form: StockProductForm;
   onChange: (patch: Partial<StockProductForm>) => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onReset: () => void;
   onClose: () => void;
 }) {
@@ -4429,6 +4568,106 @@ function GeneratedPartsPreview() {
 function moneyToNumber(value: string) {
   const normalized = value.replace(/\./g, "").replace(",", ".");
   return Math.max(0, Number(normalized) || 0);
+}
+
+function numericIdFromString(value: string) {
+  return Math.abs(value.split("").reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) | 0, 0));
+}
+
+function inventoryMeta<K extends LojaInventoryMeta["kind"]>(
+  kind: K,
+  data: K extends "phone" ? Phone : Part,
+): LojaInventoryMeta {
+  const { id: _id, productId: _productId, ...cleanData } = data;
+  return {
+    app: "lojadeiphone",
+    version: 1,
+    kind,
+    data: cleanData,
+  } as LojaInventoryMeta;
+}
+
+function parseInventoryProduct(row: InventoryProductRow) {
+  if (!row.observacoes) return null;
+
+  try {
+    const meta = JSON.parse(row.observacoes) as LojaInventoryMeta;
+    if (meta.app !== "lojadeiphone" || meta.version !== 1) return null;
+
+    if (meta.kind === "phone") {
+      return {
+        kind: "phone" as const,
+        item: {
+          ...meta.data,
+          id: numericIdFromString(row.id),
+          productId: row.id,
+          precoVenda: Number(row.preco_venda) || meta.data.precoVenda,
+          status: (row.status as PhoneStatus) || meta.data.status,
+        },
+      };
+    }
+
+    return {
+      kind: "part" as const,
+      item: {
+        ...meta.data,
+        id: numericIdFromString(row.id),
+        productId: row.id,
+        preco: Number(row.preco_venda) || meta.data.preco,
+        quantidade: Number(row.quantidade) || meta.data.quantidade,
+        minimo: Number(row.estoque_minimo) || meta.data.minimo,
+        status: (row.status as Part["status"]) || meta.data.status,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function saveLojaInventoryProduct({
+  userId,
+  kind,
+  name,
+  sku,
+  salePrice,
+  quantity,
+  minimum,
+  status,
+  data,
+}: {
+  userId: string;
+  kind: "phone" | "part";
+  name: string;
+  sku: string;
+  salePrice: number;
+  quantity: number;
+  minimum: number;
+  status: string;
+  data: Phone | Part;
+}) {
+  const meta = inventoryMeta(kind, data as Phone & Part);
+  const { data: saved, error } = await supabase
+    .from("products")
+    .insert({
+      user_id: userId,
+      nome: name,
+      sku,
+      preco_venda: salePrice,
+      quantidade: quantity,
+      estoque_minimo: minimum,
+      status,
+      observacoes: JSON.stringify(meta),
+    })
+    .select("id,nome,sku,preco_venda,quantidade,estoque_minimo,status,observacoes")
+    .maybeSingle();
+
+  if (error || !saved) {
+    toast.error("Nao consegui salvar o item no banco da sua conta");
+    return null;
+  }
+
+  const parsed = parseInventoryProduct(saved as InventoryProductRow);
+  return parsed?.item ?? null;
 }
 
 function dateToISO(date: Date) {
