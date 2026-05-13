@@ -732,6 +732,7 @@ function LojaDeIphonePage() {
   const [newPhone, setNewPhone] = useState({ modelo: "iPhone 11", capacidade: "128GB", cor: "" });
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
   const [stockProduct, setStockProduct] = useState<StockProductForm>(emptyStockProductForm);
+  const [stockProductOpen, setStockProductOpen] = useState(false);
   const [imeiQuery, setImeiQuery] = useState("");
   const [imeiApiKey, setImeiApiKey] = useState(() =>
     typeof window === "undefined" ? "" : localStorage.getItem("fiado-imei-api-key") || "",
@@ -947,23 +948,40 @@ function LojaDeIphonePage() {
     });
   }
 
+  function openStockProductForm(kind: StockKind) {
+    const isPhone = kind === "Aparelho";
+    const isAccessory = kind.includes("Acess");
+    setStockProduct({
+      ...emptyStockProductForm,
+      kind,
+      tipo: isPhone ? "Celular" : isAccessory ? "Capinha" : "Bateria",
+      nome: "",
+      categoria: isPhone ? "Seminovo" : "Premium",
+      modelo: isAccessory ? "" : "iPhone 11",
+      quantidadeMinima: isPhone ? "0" : "2",
+      diasGarantia: isPhone ? "90" : "30",
+      disponibilidade: emptyStockProductForm.disponibilidade,
+    });
+    setStockProductOpen(true);
+    window.requestAnimationFrame(() => focusSection("iphone-stock-product-form"));
+  }
+
   function startPrimaryFlow() {
     if (active === "celulares") {
-      setNewPhone((current) => ({ ...current, cor: current.cor || "Preto" }));
-      focusSection("iphone-phone-form");
-      toast.success("Cadastro de celular pronto para preencher");
+      openStockProductForm("Aparelho");
+      toast.success("Cadastro completo de iPhone pronto para preencher");
       return;
     }
 
     if (active === "pecas") {
-      setStockProduct((current) => ({
-        ...current,
-        kind: "Peça",
-        tipo: current.tipo || "Bateria",
-        modelo: current.modelo || "iPhone 11",
-      }));
-      focusSection("iphone-stock-product-form");
-      toast.success("Cadastro de peça pronto para preencher");
+      openStockProductForm(emptyStockProductForm.kind);
+      toast.success("Cadastro completo de peca pronto para preencher");
+      return;
+    }
+
+    if (active === "estoque") {
+      openStockProductForm("Aparelho");
+      toast.success("Cadastro de estoque pronto para preencher");
       return;
     }
 
@@ -1209,6 +1227,8 @@ function LojaDeIphonePage() {
     }
 
     setStockProduct(emptyStockProductForm);
+    setStockProductOpen(false);
+    resetFilters("estoque");
   }
 
   function addService() {
@@ -1498,6 +1518,17 @@ function LojaDeIphonePage() {
               />
             )}
 
+            {stockProductOpen && (
+              <StockProductFormCard
+                id="iphone-stock-product-form"
+                form={stockProduct}
+                onChange={(patch) => setStockProduct((current) => ({ ...current, ...patch }))}
+                onSave={saveStockProduct}
+                onReset={() => setStockProduct(emptyStockProductForm)}
+                onClose={() => setStockProductOpen(false)}
+              />
+            )}
+
             {active === "celulares" && (
               <>
                 <ImeiLookupCard
@@ -1515,30 +1546,6 @@ function LojaDeIphonePage() {
                   onLookup={lookupImei}
                   onCertificate={generateImeiCertificate}
                 />
-                <ModuleCard
-                  id="iphone-phone-form"
-                  title="Cadastro rápido de celular"
-                  icon={Smartphone}
-                  action={<Button onClick={addPhone}>Cadastrar celular</Button>}
-                >
-                  <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
-                    <SelectLike
-                      value={newPhone.modelo}
-                      onChange={(value) => setNewPhone({ ...newPhone, modelo: value })}
-                      options={iphoneModels}
-                    />
-                    <SelectLike
-                      value={newPhone.capacidade}
-                      onChange={(value) => setNewPhone({ ...newPhone, capacidade: value })}
-                      options={["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"]}
-                    />
-                    <Input
-                      placeholder="Cor"
-                      value={newPhone.cor}
-                      onChange={(event) => setNewPhone({ ...newPhone, cor: event.target.value })}
-                    />
-                  </div>
-                </ModuleCard>
               </>
             )}
 
@@ -1575,43 +1582,6 @@ function LojaDeIphonePage() {
 
             {active === "pecas" && (
               <>
-                <StockProductFormCard
-                  id="iphone-stock-product-form"
-                  form={stockProduct}
-                  onChange={(patch) => setStockProduct((current) => ({ ...current, ...patch }))}
-                  onSave={saveStockProduct}
-                  onReset={() => setStockProduct(emptyStockProductForm)}
-                />
-                <div className="hidden">
-                  <ModuleCard
-                    title="Cadastro rápido de peça"
-                    icon={Package}
-                    action={<Button onClick={addPart}>Cadastrar peça</Button>}
-                  >
-                    <div className="grid gap-3 lg:grid-cols-[1fr_1fr_120px]">
-                      <SelectLike
-                        value={newPart.tipo}
-                        onChange={(value) => setNewPart({ ...newPart, tipo: value })}
-                        options={partTypes}
-                      />
-                      <SelectLike
-                        value={newPart.modelo}
-                        onChange={(value) => setNewPart({ ...newPart, modelo: value })}
-                        options={iphoneModels}
-                      />
-                      <Input
-                        type="number"
-                        min={0}
-                        placeholder="Qtd."
-                        value={newPart.quantidade}
-                        onChange={(event) =>
-                          setNewPart({ ...newPart, quantidade: event.target.value })
-                        }
-                      />
-                    </div>
-                  </ModuleCard>
-                </div>
-                <GeneratedPartsPreview />
                 <DataCard>
                   <ResponsiveTable
                     columns={[
@@ -2526,12 +2496,14 @@ function StockProductFormCard({
   onChange,
   onSave,
   onReset,
+  onClose,
 }: {
   id?: string;
   form: StockProductForm;
   onChange: (patch: Partial<StockProductForm>) => void;
   onSave: () => void;
   onReset: () => void;
+  onClose: () => void;
 }) {
   const cost = moneyToNumber(form.valorCusto);
   const sale = moneyToNumber(form.valorVenda);
@@ -2865,14 +2837,9 @@ function StockProductFormCard({
             <Trash2 className="h-4 w-4" />
             Limpar formulario
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => toast.success("Cadastro mantido em aberto")}
-            className="rounded-full"
-          >
+          <Button type="button" variant="outline" onClick={onClose} className="rounded-full">
             <ArrowRight className="h-4 w-4 rotate-180" />
-            Voltar
+            Fechar
           </Button>
         </div>
         <Button
@@ -2998,10 +2965,11 @@ function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => voi
     configuracoes: "Preferências da V2 para loja de iPhones e assistência técnica.",
   };
   const button: Partial<Record<TabId, string>> = {
-    celulares: "+ Novo celular",
-    pecas: "+ Nova peça",
+    celulares: "+ Adicionar iPhone",
+    pecas: "+ Adicionar peça",
     servicos: "+ Novo serviço",
     vendas: "+ Nova venda",
+    estoque: "+ Adicionar item",
   };
   return (
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
