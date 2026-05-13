@@ -38,10 +38,17 @@ export type Sale = {
 export type Product = {
   id: string;
   nome: string;
+  categoria: string | null;
+  marca: string | null;
   sku: string | null;
+  codigo_barras: string | null;
+  fornecedor: string | null;
+  custo_unitario: number;
   preco_venda: number;
   quantidade: number;
   estoque_minimo: number;
+  localizacao: string | null;
+  garantia_dias: number;
   status: string;
   observacoes: string | null;
   created_at: string;
@@ -118,8 +125,10 @@ type RawPayment = Omit<Payment, "valor_pago"> & {
   valor_pago: number | string | null;
 };
 
-type RawProduct = Omit<Product, "preco_venda"> & {
+type RawProduct = Omit<Product, "preco_venda" | "custo_unitario" | "garantia_dias"> & {
   preco_venda: number | string | null;
+  custo_unitario?: number | string | null;
+  garantia_dias?: number | string | null;
 };
 
 type RawSaleItem = Omit<SaleItem, "preco_unitario" | "subtotal"> & {
@@ -152,17 +161,34 @@ export const buildInstallmentSchedule = ({
 
 const normalizeProduct = (p: RawProduct): Product => ({
   ...p,
+  categoria: p.categoria ?? null,
+  marca: p.marca ?? null,
+  codigo_barras: p.codigo_barras ?? null,
+  fornecedor: p.fornecedor ?? null,
+  custo_unitario: num(p.custo_unitario),
   preco_venda: num(p.preco_venda),
+  localizacao: p.localizacao ?? null,
+  garantia_dias: Number(p.garantia_dias ?? 0),
 });
 
 const isProductSchemaError = (error: unknown) => {
   const value = error as { code?: string; message?: string } | null;
   const message = value?.message ?? String(error ?? "");
+  const productColumns = [
+    "categoria",
+    "marca",
+    "codigo_barras",
+    "fornecedor",
+    "custo_unitario",
+    "localizacao",
+    "garantia_dias",
+  ];
   return (
     value?.code === "PGRST205" ||
     message.includes("public.products") ||
     message.includes("public.sale_items") ||
-    message.includes("Could not find the table")
+    message.includes("Could not find the table") ||
+    (message.includes("schema cache") && productColumns.some((column) => message.includes(column)))
   );
 };
 
@@ -221,10 +247,17 @@ const saveLocalProduct = (
   const saved: Product = {
     id: payload.id ?? crypto.randomUUID(),
     nome: payload.nome,
+    categoria: payload.categoria ?? null,
+    marca: payload.marca ?? null,
     sku: payload.sku ?? null,
+    codigo_barras: payload.codigo_barras ?? null,
+    fornecedor: payload.fornecedor ?? null,
+    custo_unitario: num(payload.custo_unitario),
     preco_venda: num(payload.preco_venda),
     quantidade: Number(payload.quantidade ?? 0),
     estoque_minimo: Number(payload.estoque_minimo ?? 0),
+    localizacao: payload.localizacao ?? null,
+    garantia_dias: Number(payload.garantia_dias ?? 0),
     status: payload.status ?? "ativo",
     observacoes: payload.observacoes ?? null,
     created_at: existing?.created_at ?? now,

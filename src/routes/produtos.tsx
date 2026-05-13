@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { type ReactNode, useDeferredValue, useEffect, useRef, useState } from "react";
 import { PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { brl } from "@/lib/format";
 import { useDeleteProduct, useProducts, useUpsertProduct, type Product } from "@/hooks/use-data";
 
@@ -13,16 +15,40 @@ export const Route = createFileRoute("/produtos")({
   component: ProductsPage,
 });
 
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Label className="grid gap-1.5 text-xs font-semibold text-foreground/80">
+      {label}
+      {children}
+    </Label>
+  );
+}
+
 const emptyForm = {
   nome: "",
+  categoria: "",
+  marca: "",
   sku: "",
+  codigo_barras: "",
+  fornecedor: "",
+  custo_unitario: "",
   preco_venda: "",
   quantidade: "",
   estoque_minimo: "0",
+  localizacao: "",
+  garantia_dias: "",
+  status: "ativo",
   observacoes: "",
 };
 
 const parseNumber = (value: string) => Number(value.replace(",", ".") || 0);
+const parseInteger = (value: string) => Math.max(0, Math.floor(parseNumber(value)));
+const marginPercent = (costValue: string, saleValue: string) => {
+  const cost = parseNumber(costValue);
+  const sale = parseNumber(saleValue);
+  if (sale <= 0) return 0;
+  return (Math.max(sale - cost, 0) / sale) * 100;
+};
 
 const productErrorMessage = (error: unknown) => {
   const message =
@@ -57,10 +83,18 @@ function ProductsPage() {
     if (!editing) return;
     setForm({
       nome: editing.nome,
+      categoria: editing.categoria ?? "",
+      marca: editing.marca ?? "",
       sku: editing.sku ?? "",
+      codigo_barras: editing.codigo_barras ?? "",
+      fornecedor: editing.fornecedor ?? "",
+      custo_unitario: editing.custo_unitario ? String(editing.custo_unitario) : "",
       preco_venda: String(editing.preco_venda),
       quantidade: String(editing.quantidade),
       estoque_minimo: String(editing.estoque_minimo),
+      localizacao: editing.localizacao ?? "",
+      garantia_dias: editing.garantia_dias ? String(editing.garantia_dias) : "",
+      status: editing.status ?? "ativo",
       observacoes: editing.observacoes ?? "",
     });
   }, [editing]);
@@ -95,6 +129,10 @@ function ProductsPage() {
       toast.error("Informe um preço válido");
       return;
     }
+    if (parseNumber(form.custo_unitario) < 0) {
+      toast.error("Informe um custo válido");
+      return;
+    }
     if (parseNumber(form.quantidade) < 0) {
       toast.error("Informe uma quantidade válida");
       return;
@@ -104,12 +142,19 @@ function ProductsPage() {
       await upsert.mutateAsync({
         id: editing?.id,
         nome: form.nome.trim(),
+        categoria: form.categoria.trim() || null,
+        marca: form.marca.trim() || null,
         sku: form.sku.trim() || null,
+        codigo_barras: form.codigo_barras.trim() || null,
+        fornecedor: form.fornecedor.trim() || null,
+        custo_unitario: parseNumber(form.custo_unitario),
         preco_venda: parseNumber(form.preco_venda),
-        quantidade: Math.max(0, Math.floor(parseNumber(form.quantidade))),
-        estoque_minimo: Math.max(0, Math.floor(parseNumber(form.estoque_minimo))),
+        quantidade: parseInteger(form.quantidade),
+        estoque_minimo: parseInteger(form.estoque_minimo),
+        localizacao: form.localizacao.trim() || null,
+        garantia_dias: parseInteger(form.garantia_dias),
         observacoes: form.observacoes.trim() || null,
-        status: "ativo",
+        status: form.status,
       });
       toast.success(editing ? "Produto atualizado" : "Produto cadastrado");
       reset();
@@ -146,57 +191,170 @@ function ProductsPage() {
         <div ref={formRef} className="scroll-mt-6 rounded-[22px] bg-surface p-4 shadow-soft sm:p-5">
           <div className="mb-5 flex items-center gap-2 text-sm font-semibold">
             <PackagePlus className="h-4 w-4 text-primary" />
-            {editing ? "Editar produto" : "Cadastro rápido"}
+            {editing ? "Editar produto completo" : "Cadastro completo de produto"}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_130px_110px_120px]">
-            <Input
-              ref={nameInputRef}
-              value={form.nome}
-              onChange={(e) => setForm({ ...form, nome: e.target.value })}
-              placeholder="Nome do produto"
-            />
-            <Input
-              value={form.preco_venda}
-              onChange={(e) => setForm({ ...form, preco_venda: e.target.value })}
-              inputMode="decimal"
-              placeholder="Preço"
-            />
-            <Input
-              value={form.quantidade}
-              onChange={(e) => setForm({ ...form, quantidade: e.target.value })}
-              inputMode="numeric"
-              placeholder="Qtd."
-            />
-            <Input
-              value={form.estoque_minimo}
-              onChange={(e) => setForm({ ...form, estoque_minimo: e.target.value })}
-              inputMode="numeric"
-              placeholder="Mínimo"
-            />
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-[160px_minmax(0,1fr)_auto_auto]">
-            <Input
-              value={form.sku}
-              onChange={(e) => setForm({ ...form, sku: e.target.value })}
-              placeholder="Código/SKU"
-            />
-            <Input
-              value={form.observacoes}
-              onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-              placeholder="Observações"
-            />
-            <Button
-              className="h-10 rounded-xl sm:h-auto"
-              onClick={submit}
-              disabled={upsert.isPending}
-            >
-              {upsert.isPending ? "Salvando..." : editing ? "Atualizar" : "Cadastrar"}
-            </Button>
-            {editing && (
-              <Button variant="ghost" className="h-10 rounded-xl sm:h-auto" onClick={reset}>
-                Cancelar
+
+          <div className="grid gap-5">
+            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+              <h2 className="text-sm font-semibold text-foreground">Dados gerais</h2>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.3fr_0.8fr_0.8fr]">
+                <Field label="Nome do produto *">
+                  <Input
+                    ref={nameInputRef}
+                    value={form.nome}
+                    onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                    placeholder="Ex: Perfume 123, Tela iPhone 11, Camiseta..."
+                  />
+                </Field>
+                <Field label="Categoria">
+                  <Input
+                    value={form.categoria}
+                    onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+                    placeholder="Ex: Celular, Peça, Acessório"
+                  />
+                </Field>
+                <Field label="Marca">
+                  <Input
+                    value={form.marca}
+                    onChange={(e) => setForm({ ...form, marca: e.target.value })}
+                    placeholder="Ex: Apple, Natura"
+                  />
+                </Field>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <Field label="Código/SKU">
+                  <Input
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    placeholder="Código interno"
+                  />
+                </Field>
+                <Field label="Código de barras">
+                  <Input
+                    value={form.codigo_barras}
+                    onChange={(e) => setForm({ ...form, codigo_barras: e.target.value })}
+                    placeholder="EAN, UPC ou código manual"
+                  />
+                </Field>
+                <Field label="Status">
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    className="h-10 rounded-xl border border-border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="ativo">Ativo</option>
+                    <option value="reservado">Reservado</option>
+                    <option value="inativo">Inativo</option>
+                    <option value="defeituoso">Defeituoso</option>
+                  </select>
+                </Field>
+              </div>
+            </div>
+
+            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+              <h2 className="text-sm font-semibold text-foreground">Preço e margem</h2>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Field label="Custo unitário (R$)">
+                  <Input
+                    value={form.custo_unitario}
+                    onChange={(e) => setForm({ ...form, custo_unitario: e.target.value })}
+                    inputMode="decimal"
+                    placeholder="0,00"
+                  />
+                </Field>
+                <Field label="Preço de venda (R$) *">
+                  <Input
+                    value={form.preco_venda}
+                    onChange={(e) => setForm({ ...form, preco_venda: e.target.value })}
+                    inputMode="decimal"
+                    placeholder="0,00"
+                  />
+                </Field>
+                <Field label="Lucro previsto">
+                  <Input
+                    value={brl(
+                      Math.max(parseNumber(form.preco_venda) - parseNumber(form.custo_unitario), 0),
+                    )}
+                    readOnly
+                  />
+                </Field>
+                <Field label="Margem">
+                  <Input
+                    value={`${marginPercent(form.custo_unitario, form.preco_venda).toFixed(1)}%`}
+                    readOnly
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+              <h2 className="text-sm font-semibold text-foreground">Estoque e fornecedor</h2>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Field label="Quantidade em estoque">
+                  <Input
+                    value={form.quantidade}
+                    onChange={(e) => setForm({ ...form, quantidade: e.target.value })}
+                    inputMode="numeric"
+                    placeholder="0"
+                  />
+                </Field>
+                <Field label="Estoque mínimo">
+                  <Input
+                    value={form.estoque_minimo}
+                    onChange={(e) => setForm({ ...form, estoque_minimo: e.target.value })}
+                    inputMode="numeric"
+                    placeholder="0"
+                  />
+                </Field>
+                <Field label="Localização">
+                  <Input
+                    value={form.localizacao}
+                    onChange={(e) => setForm({ ...form, localizacao: e.target.value })}
+                    placeholder="Gaveta, caixa, prateleira"
+                  />
+                </Field>
+                <Field label="Garantia em dias">
+                  <Input
+                    value={form.garantia_dias}
+                    onChange={(e) => setForm({ ...form, garantia_dias: e.target.value })}
+                    inputMode="numeric"
+                    placeholder="0"
+                  />
+                </Field>
+              </div>
+              <Field label="Fornecedor">
+                <Input
+                  value={form.fornecedor}
+                  onChange={(e) => setForm({ ...form, fornecedor: e.target.value })}
+                  placeholder="Nome do fornecedor"
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-3 rounded-2xl border border-border/70 bg-surface-muted/50 p-4">
+              <h2 className="text-sm font-semibold text-foreground">Observações</h2>
+              <Textarea
+                value={form.observacoes}
+                onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+                placeholder="Detalhes do produto, condição, variações, combinado com fornecedor..."
+                className="min-h-[96px] rounded-xl bg-background"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              {editing && (
+                <Button variant="ghost" className="h-11 rounded-xl px-5" onClick={reset}>
+                  Cancelar
+                </Button>
+              )}
+              <Button className="h-11 rounded-xl px-5" onClick={submit} disabled={upsert.isPending}>
+                {upsert.isPending
+                  ? "Salvando..."
+                  : editing
+                    ? "Atualizar produto"
+                    : "Cadastrar produto"}
               </Button>
-            )}
+            </div>
           </div>
         </div>
 
