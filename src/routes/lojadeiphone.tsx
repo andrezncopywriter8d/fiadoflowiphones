@@ -147,6 +147,7 @@ type ServiceOrder = {
 type Client = {
   id: number;
   nome: string;
+  tipo: "B2C" | "B2B";
   whatsapp: string;
   cpf: string;
   endereco: string;
@@ -157,6 +158,7 @@ type Client = {
   servicos: string[];
   pecas: string[];
   status: "Ativo" | "Inadimplente" | "Bloqueado" | "VIP";
+  observacoes?: string;
 };
 
 type Sale = {
@@ -803,6 +805,15 @@ function LojaDeIphonePage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [newClient, setNewClient] = useState({
+    nome: "",
+    tipo: "B2C" as Client["tipo"],
+    whatsapp: "",
+    documento: "",
+    endereco: "",
+    observacoes: "",
+  });
+  const [clientListText, setClientListText] = useState("");
   const [newPhone, setNewPhone] = useState({ modelo: "iPhone 11", capacidade: "128GB", cor: "" });
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
   const [stockProduct, setStockProduct] = useState<StockProductForm>(emptyStockProductForm);
@@ -926,13 +937,15 @@ function LojaDeIphonePage() {
       item.status,
     ),
   );
-  const filteredClients = clients.filter((item) =>
-    matchesFilters(
-      [item.nome, item.whatsapp, item.cpf, item.status],
-      query,
-      statusFilter,
-      item.status,
-    ),
+  const filteredClients = clients.filter(
+    (item) =>
+      matchesFilters(
+        [item.nome, item.tipo, item.whatsapp, item.cpf, item.status, item.observacoes ?? ""],
+        query,
+        statusFilter,
+        item.status,
+      ) &&
+      (categoryFilter === "Todos" || item.tipo === categoryFilter),
   );
   const filteredSales = sales.filter(
     (item) =>
@@ -1109,6 +1122,12 @@ function LojaDeIphonePage() {
     if (active === "servicos") {
       focusSection("iphone-service-form");
       toast.success("Ordem de serviço pronta para preencher");
+      return;
+    }
+
+    if (active === "clientes") {
+      focusSection("iphone-client-form");
+      toast.success("Cadastro de cliente pronto para preencher");
       return;
     }
 
@@ -1383,6 +1402,89 @@ function LojaDeIphonePage() {
     };
     setServices((items) => [service, ...items]);
     toast.success("Ordem de serviço criada");
+  }
+
+  function createClientFromDraft(draft: {
+    nome: string;
+    tipo: Client["tipo"];
+    whatsapp?: string;
+    documento?: string;
+    endereco?: string;
+    observacoes?: string;
+  }): Client {
+    return {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      nome: draft.nome.trim(),
+      tipo: draft.tipo,
+      whatsapp: draft.whatsapp?.trim() || "",
+      cpf: draft.documento?.trim() || "",
+      endereco: draft.endereco?.trim() || "",
+      compras: 0,
+      totalComprado: 0,
+      aberto: 0,
+      aparelhos: [],
+      servicos: [],
+      pecas: [],
+      status: "Ativo",
+      observacoes: draft.observacoes?.trim() || "",
+    };
+  }
+
+  function addClient() {
+    if (!newClient.nome.trim()) {
+      toast.error("Informe o nome do cliente");
+      return;
+    }
+
+    setClients((items) => [
+      createClientFromDraft({
+        nome: newClient.nome,
+        tipo: newClient.tipo,
+        whatsapp: newClient.whatsapp,
+        documento: newClient.documento,
+        endereco: newClient.endereco,
+        observacoes: newClient.observacoes,
+      }),
+      ...items,
+    ]);
+    setNewClient({
+      nome: "",
+      tipo: newClient.tipo,
+      whatsapp: "",
+      documento: "",
+      endereco: "",
+      observacoes: "",
+    });
+    toast.success("Cliente cadastrado");
+  }
+
+  function importClientList() {
+    const lines = clientListText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (!lines.length) {
+      toast.error("Cole uma lista de clientes para importar");
+      return;
+    }
+
+    const imported = lines.map((line) => {
+      const [name = "", whatsapp = "", document = "", note = ""] = line
+        .split(/[;,|]/)
+        .map((part) => part.trim());
+      return createClientFromDraft({
+        nome: name || "Cliente sem nome",
+        tipo: newClient.tipo,
+        whatsapp,
+        documento: document,
+        observacoes: note,
+      });
+    });
+
+    setClients((items) => [...imported, ...items]);
+    setClientListText("");
+    toast.success(`${imported.length} clientes importados`);
   }
 
   function addSale() {
@@ -1791,9 +1893,11 @@ function LojaDeIphonePage() {
                     ? partTypes.slice(0, 18)
                     : active === "vendas"
                       ? ["Celular", "Peça", "Serviço", "Combo"]
-                      : active === "emprestimos"
-                        ? ["Peça"]
-                        : []
+                      : active === "clientes"
+                        ? ["B2C", "B2B"]
+                        : active === "emprestimos"
+                          ? ["Peça"]
+                          : []
                 }
               />
             )}
@@ -1967,32 +2071,122 @@ function LojaDeIphonePage() {
             )}
 
             {active === "clientes" && (
-              <DataCard>
-                <ResponsiveTable
-                  columns={[
-                    "Cliente",
-                    "Histórico",
-                    "Compras",
-                    "Total comprado",
-                    "Em aberto",
-                    "Status",
-                    "Ações",
-                  ]}
-                  rows={filteredClients.map((client) => [
-                    <ItemTitle
-                      key="cliente"
-                      title={client.nome}
-                      subtitle={`${client.whatsapp} • ${client.endereco || "Sem endereço"}`}
-                    />,
-                    `${client.aparelhos.join(", ") || "Sem aparelhos"} • ${client.servicos.join(", ") || "Sem serviços"}`,
-                    String(client.compras),
-                    brl(client.totalComprado),
-                    brl(client.aberto),
-                    <StatusPill key="status" status={client.status} />,
-                    <Actions key="actions" onDelete={() => removeById(setClients, client.id)} />,
-                  ])}
-                />
-              </DataCard>
+              <>
+                <ModuleCard
+                  id="iphone-client-form"
+                  title="Cadastrar clientes"
+                  icon={Users}
+                  action={<Button onClick={addClient}>Cadastrar cliente</Button>}
+                >
+                  <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
+                    {[
+                      { id: "B2C", label: "B2C venda final" },
+                      { id: "B2B", label: "B2B revenda" },
+                    ].map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() =>
+                          setNewClient({ ...newClient, tipo: option.id as Client["tipo"] })
+                        }
+                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                          newClient.tipo === option.id
+                            ? "bg-primary text-primary-foreground shadow-soft"
+                            : "bg-surface text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[1.2fr_150px_1fr_1fr]">
+                    <Input
+                      placeholder="Nome ou empresa"
+                      value={newClient.nome}
+                      onChange={(event) => setNewClient({ ...newClient, nome: event.target.value })}
+                    />
+                    <Input
+                      placeholder="WhatsApp"
+                      value={newClient.whatsapp}
+                      onChange={(event) =>
+                        setNewClient({ ...newClient, whatsapp: event.target.value })
+                      }
+                    />
+                    <Input
+                      placeholder="CPF/CNPJ opcional"
+                      value={newClient.documento}
+                      onChange={(event) =>
+                        setNewClient({ ...newClient, documento: event.target.value })
+                      }
+                    />
+                    <Input
+                      placeholder="Endereco opcional"
+                      value={newClient.endereco}
+                      onChange={(event) =>
+                        setNewClient({ ...newClient, endereco: event.target.value })
+                      }
+                    />
+                  </div>
+                  <Textarea
+                    className="mt-3 min-h-20 rounded-[22px]"
+                    placeholder="Observacoes, perfil de compra, limite, modelos de interesse..."
+                    value={newClient.observacoes}
+                    onChange={(event) =>
+                      setNewClient({ ...newClient, observacoes: event.target.value })
+                    }
+                  />
+                  <div className="mt-4 rounded-[22px] border border-border bg-surface-muted p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          Importar lista de clientes
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Cole um por linha. Formato: nome; whatsapp; cpf/cnpj; observacao.
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" onClick={importClientList}>
+                        Importar lista
+                      </Button>
+                    </div>
+                    <Textarea
+                      className="mt-3 min-h-24 rounded-[18px] bg-surface"
+                      placeholder={`Joao Silva; 11999999999; 000.000.000-00; cliente final\nLoja Alfa; 11988888888; 00.000.000/0001-00; revenda`}
+                      value={clientListText}
+                      onChange={(event) => setClientListText(event.target.value)}
+                    />
+                  </div>
+                </ModuleCard>
+
+                <DataCard>
+                  <ResponsiveTable
+                    columns={[
+                      "Cliente",
+                      "Tipo",
+                      "Histórico",
+                      "Compras",
+                      "Total comprado",
+                      "Em aberto",
+                      "Status",
+                      "Ações",
+                    ]}
+                    rows={filteredClients.map((client) => [
+                      <ItemTitle
+                        key="cliente"
+                        title={client.nome}
+                        subtitle={`${client.whatsapp} • ${client.endereco || "Sem endereço"}`}
+                      />,
+                      <StatusPill key="tipo" status={client.tipo} />,
+                      `${client.aparelhos.join(", ") || "Sem aparelhos"} • ${client.servicos.join(", ") || "Sem serviços"}`,
+                      String(client.compras),
+                      brl(client.totalComprado),
+                      brl(client.aberto),
+                      <StatusPill key="status" status={client.status} />,
+                      <Actions key="actions" onDelete={() => removeById(setClients, client.id)} />,
+                    ])}
+                  />
+                </DataCard>
+              </>
             )}
 
             {active === "vendas" && (
@@ -3461,6 +3655,7 @@ function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => voi
     celulares: "+ Adicionar iPhone",
     pecas: "+ Adicionar peça",
     servicos: "+ Novo serviço",
+    clientes: "+ Novo cliente",
     vendas: "+ Nova venda",
     emprestimos: "+ Novo emprestimo",
     estoque: "+ Adicionar item",
