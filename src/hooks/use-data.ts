@@ -166,6 +166,29 @@ const isProductSchemaError = (error: unknown) => {
   );
 };
 
+const isSaleScheduleSchemaError = (error: unknown) => {
+  const value = error as { code?: string; message?: string } | null;
+  const message = value?.message ?? String(error ?? "");
+  const mentionsScheduleField = ["parcelas_total", "dia_cobranca", "valor_parcela"].some((column) =>
+    message.includes(column),
+  );
+  return (
+    mentionsScheduleField &&
+    (value?.code === "42703" ||
+      value?.code === "PGRST204" ||
+      message.includes("Could not find") ||
+      message.includes("column"))
+  );
+};
+
+const stripSaleScheduleFields = <T extends Record<string, unknown>>(payload: T) => {
+  const legacyPayload = { ...payload };
+  delete legacyPayload.parcelas_total;
+  delete legacyPayload.dia_cobranca;
+  delete legacyPayload.valor_parcela;
+  return legacyPayload;
+};
+
 const localProductKey = (userId: string) => `fiado:products:${userId}`;
 
 const readLocalProducts = (userId: string, search?: string) => {
@@ -479,42 +502,72 @@ export function useUpsertSale() {
         await restoreSaleItemsToStock(id);
       }
       if (id) {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("sales")
           .update(salePayload)
           .eq("id", id)
           .select("*, client:clients(*)")
           .maybeSingle();
+        if (error && isSaleScheduleSchemaError(error)) {
+          const retry = await supabase
+            .from("sales")
+            .update(stripSaleScheduleFields(salePayload))
+            .eq("id", id)
+            .select("*, client:clients(*)")
+            .maybeSingle();
+          data = retry.data;
+          error = retry.error;
+        }
         if (error) throw error;
         saved = data as Sale | null;
       } else {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("sales")
           .insert({ ...salePayload, user_id: user.id })
           .select("*, client:clients(*)")
           .maybeSingle();
+        if (error && isSaleScheduleSchemaError(error)) {
+          const retry = await supabase
+            .from("sales")
+            .insert(stripSaleScheduleFields({ ...salePayload, user_id: user.id }))
+            .select("*, client:clients(*)")
+            .maybeSingle();
+          data = retry.data;
+          error = retry.error;
+        }
         if (error) throw error;
         saved = data as Sale | null;
       }
 
       if (!saved) return null;
 
-      await supabase.from("sale_items").delete().eq("sale_id", saved.id);
+      const { error: deleteItemsError } = await supabase
+        .from("sale_items")
+        .delete()
+        .eq("sale_id", saved.id);
+      if (deleteItemsError && !isProductSchemaError(deleteItemsError)) throw deleteItemsError;
 
-      if (items.length > 0) {
+      let canUseProductTables = !deleteItemsError;
+      if (items.length > 0 && canUseProductTables) {
         for (const item of items) {
           const { data: product, error: productError } = await supabase
             .from("products")
             .select("quantidade")
             .eq("id", item.product_id)
             .maybeSingle();
+          if (productError && isProductSchemaError(productError)) {
+            canUseProductTables = false;
+            break;
+          }
           if (productError) throw productError;
           if (!product) throw new Error(`Produto "${item.product_name}" não encontrado`);
           if (product.quantidade < item.quantidade) {
             throw new Error(`Estoque insuficiente para ${item.product_name}`);
           }
         }
+      }
 
+      if (items.length > 0 && canUseProductTables) {
         const saleItems = items.map((item) => ({
           user_id: user.id,
           sale_id: saved!.id,
@@ -525,31 +578,39 @@ export function useUpsertSale() {
           subtotal: Number((item.preco_unitario * item.quantidade).toFixed(2)),
         }));
         const { error } = await supabase.from("sale_items").insert(saleItems);
-        if (error) throw error;
+        if (error && isProductSchemaError(error)) {
+          canUseProductTables = false;
+        } else if (error) {
+          throw error;
+        }
+      }
 
+      if (items.length > 0 && canUseProductTables) {
         for (const item of items) {
           const { data: product, error: productError } = await supabase
             .from("products")
             .select("quantidade")
             .eq("id", item.product_id)
             .maybeSingle();
+          if (productError && isProductSchemaError(productError)) break;
           if (productError) throw productError;
           const { error: updateError } = await supabase
             .from("products")
             .update({ quantidade: Math.max((product?.quantidade ?? 0) - item.quantidade, 0) })
             .eq("id", item.product_id);
+          if (updateError && isProductSchemaError(updateError)) break;
           if (updateError) throw updateError;
         }
       }
 
       await supabase.from("reminders").delete().eq("sale_id", saved.id);
 
-      if (shouldSchedule && saved.dia_cobranca && saved.parcelas_total > 1) {
+      if (shouldSchedule && salePayload.dia_cobranca && salePayload.parcelas_total > 1) {
         const startDate = saved.data_vencimento ?? saved.data_venda;
         const dates = buildInstallmentSchedule({
           startDate,
-          chargeDay: saved.dia_cobranca,
-          count: saved.parcelas_total,
+          chargeDay: salePayload.dia_cobranca,
+          count: salePayload.parcelas_total,
         });
         const reminders = dates.map((date, index) => ({
           user_id: user.id,
@@ -557,8 +618,8 @@ export function useUpsertSale() {
           sale_id: saved.id,
           data_lembrete: date,
           horario_lembrete: "09:00",
-          titulo: `Cobrança ${index + 1}/${saved.parcelas_total}`,
-          descricao: `${saved.descricao} • ${valorParcela ? `Parcela ${brlValue(valorParcela)}` : "Parcela"}`,
+          titulo: `Cobrança ${index + 1}/${salePayload.parcelas_total}`,
+          descricao: `${saved.descricao} - ${valorParcela ? `Parcela ${brlValue(valorParcela)}` : "Parcela"}`,
           status: "pendente",
         }));
         const { error } = await supabase.from("reminders").insert(reminders);
@@ -940,7 +1001,7 @@ export function useDashboard() {
         if (s.saldo_restante <= 0) continue;
         const k = s.client_id;
         const cur = byClient.get(k) ?? {
-          nome: s.client?.nome ?? "—",
+          nome: s.client?.nome ?? "-",
           telefone: s.client?.telefone ?? null,
           saldo: 0,
         };

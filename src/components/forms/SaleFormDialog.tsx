@@ -665,7 +665,13 @@ export function SaleFormDialog({
       }
       onOpenChange(false);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Erro ao salvar venda");
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e && "message" in e
+            ? String((e as { message?: unknown }).message)
+            : "Erro ao salvar venda";
+      toast.error(message);
     }
   };
 
