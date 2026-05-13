@@ -2861,10 +2861,6 @@ Se o modo for catalogo, extraia pecas de listas soltas e marque precisaRevisao q
                     value={aiPrompt}
                     onChange={(event) => setAiPrompt(event.target.value)}
                   />
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Usa API gratuita online quando disponivel e fallback local. No deploy, funciona
-                    sem seu PC ligado.
-                  </p>
                 </ModuleCard>
 
                 {(aiAnswer || aiQuestions.length > 0) && (
