@@ -222,6 +222,12 @@
     will-change: transform, opacity;
   }
 
+  .iphone-step-transition {
+    animation: iphone-step-slide 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: 52% 42%;
+    will-change: transform, opacity, filter;
+  }
+
   .motion-list > * {
     animation: lift-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -441,6 +447,24 @@
   }
 }
 
+@keyframes iphone-step-slide {
+  0% {
+    opacity: 0;
+    filter: blur(7px);
+    transform: translate3d(28px, 0, 0) scale(0.988);
+  }
+  58% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(-3px, 0, 0) scale(1.004);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
 @keyframes lift-in {
   from {
     opacity: 0;
@@ -464,6 +488,7 @@
 
   .route-transition,
   .section-slide,
+  .iphone-step-transition,
   .motion-list > * {
     animation: none !important;
     transform: none !important;

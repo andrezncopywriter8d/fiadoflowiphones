@@ -45,7 +45,8 @@ export const Route = createFileRoute("/lojadeiphone")({
       { title: "Loja de iPhone - Fiado V2" },
       {
         name: "description",
-        content: "V2 do Fiado para lojas de iPhone, peças, assistência técnica e cobranças.",
+        content:
+          "V2 do Fiado para lojas de iPhone, peÃƒÂ§as, assistÃƒÂªncia tÃƒÂ©cnica e cobranÃƒÂ§as.",
       },
     ],
   }),
@@ -66,18 +67,18 @@ type TabId =
   | "configuracoes";
 
 type PhoneStatus =
-  | "Disponível"
+  | "DisponÃƒÂ­vel"
   | "Vendido"
   | "Reservado"
-  | "Em manutenção"
+  | "Em manutenÃƒÂ§ÃƒÂ£o"
   | "Fiado"
   | "Consignado";
 type SaleStatus = "Pago" | "Parcial" | "Em aberto" | "Atrasado";
 type ServiceStatus =
   | "Recebido"
-  | "Em diagnóstico"
-  | "Aguardando peça"
-  | "Em manutenção"
+  | "Em diagnÃƒÂ³stico"
+  | "Aguardando peÃƒÂ§a"
+  | "Em manutenÃƒÂ§ÃƒÂ£o"
   | "Pronto"
   | "Entregue"
   | "Cancelado";
@@ -120,7 +121,7 @@ type Part = {
   minimo: number;
   localizacao: string;
   garantia: number;
-  status: "Disponível" | "Baixo estoque" | "Sem estoque" | "Reservada" | "Defeituosa";
+  status: "DisponÃƒÂ­vel" | "Baixo estoque" | "Sem estoque" | "Reservada" | "Defeituosa";
 };
 
 type ServiceOrder = {
@@ -161,7 +162,7 @@ type Client = {
 type Sale = {
   id: number;
   cliente: string;
-  tipo: "Celular" | "Peça" | "Serviço" | "Combo";
+  tipo: "Celular" | "PeÃƒÂ§a" | "ServiÃƒÂ§o" | "Combo";
   item: string;
   quantidade: number;
   unitario: number;
@@ -187,15 +188,15 @@ type Payment = {
 const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
   { id: "celulares", label: "Celulares", icon: Smartphone },
-  { id: "pecas", label: "Peças", icon: Package },
-  { id: "servicos", label: "Serviços", icon: Wrench },
+  { id: "pecas", label: "PeÃƒÂ§as", icon: Package },
+  { id: "servicos", label: "ServiÃƒÂ§os", icon: Wrench },
   { id: "clientes", label: "Clientes", icon: Users },
   { id: "vendas", label: "Vendas", icon: BadgeDollarSign },
   { id: "pagamentos", label: "Pagamentos", icon: CreditCard },
-  { id: "cobrancas", label: "Cobranças", icon: BellRing },
+  { id: "cobrancas", label: "CobranÃƒÂ§as", icon: BellRing },
   { id: "estoque", label: "Estoque", icon: Boxes },
-  { id: "relatorios", label: "Relatórios", icon: BarChart3 },
-  { id: "configuracoes", label: "Configurações", icon: Settings },
+  { id: "relatorios", label: "RelatÃƒÂ³rios", icon: BarChart3 },
+  { id: "configuracoes", label: "ConfiguraÃƒÂ§ÃƒÂµes", icon: Settings },
 ];
 
 const iphoneModels = [
@@ -217,7 +218,7 @@ const iphoneModels = [
   "iPhone 14 Pro",
   "iPhone 14 Plus",
   "iPhone 14",
-  "iPhone SE 3ª geração",
+  "iPhone SE 3Ã‚Âª geraÃƒÂ§ÃƒÂ£o",
   "iPhone 13 Pro Max",
   "iPhone 13 Pro",
   "iPhone 13",
@@ -226,7 +227,7 @@ const iphoneModels = [
   "iPhone 12 Pro",
   "iPhone 12",
   "iPhone 12 mini",
-  "iPhone SE 2ª geração",
+  "iPhone SE 2Ã‚Âª geraÃƒÂ§ÃƒÂ£o",
   "iPhone 11 Pro Max",
   "iPhone 11 Pro",
   "iPhone 11",
@@ -238,7 +239,7 @@ const iphoneModels = [
   "iPhone 8",
   "iPhone 7 Plus",
   "iPhone 7",
-  "iPhone SE 1ª geração",
+  "iPhone SE 1Ã‚Âª geraÃƒÂ§ÃƒÂ£o",
   "iPhone 6s Plus",
   "iPhone 6s",
   "iPhone 6 Plus",
@@ -262,16 +263,16 @@ const partTypes = [
   "Vidro frontal",
   "Tampa traseira",
   "Vidro traseiro",
-  "Carcaça",
+  "CarcaÃƒÂ§a",
   "Aro lateral",
-  "Lente da câmera traseira",
-  "Câmera traseira",
-  "Câmera frontal",
+  "Lente da cÃƒÂ¢mera traseira",
+  "CÃƒÂ¢mera traseira",
+  "CÃƒÂ¢mera frontal",
   "Sensor de proximidade",
   "Flex do Face ID",
-  "Flex do botão power",
-  "Flex do botão volume",
-  "Flex do botão silencioso",
+  "Flex do botÃƒÂ£o power",
+  "Flex do botÃƒÂ£o volume",
+  "Flex do botÃƒÂ£o silencioso",
   "Flex de carga",
   "Dock de carga",
   "Conector de carga Lightning",
@@ -281,27 +282,27 @@ const partTypes = [
   "Alto-falante viva-voz/campainha",
   "Taptic Engine/vibracall",
   "Bandeja SIM",
-  "Botão home",
+  "BotÃƒÂ£o home",
   "Touch ID",
-  "Placa lógica",
+  "Placa lÃƒÂ³gica",
   "Placa de carga",
   "Antena",
   "Cabo coaxial",
   "Parafusos",
-  "Blindagem metálica",
-  "Adesivo de vedação da tela",
+  "Blindagem metÃƒÂ¡lica",
+  "Adesivo de vedaÃƒÂ§ÃƒÂ£o da tela",
   "Adesivo da bateria",
-  "Película",
+  "PelÃƒÂ­cula",
   "Capinha",
   "Cabo",
   "Carregador",
   "Conector interno",
   "Sensor de luz",
-  "Módulo Wi-Fi/Bluetooth",
-  "Módulo TrueDepth",
+  "MÃƒÂ³dulo Wi-Fi/Bluetooth",
+  "MÃƒÂ³dulo TrueDepth",
   "Flash",
   "Scanner LiDAR",
-  "Suporte de câmera",
+  "Suporte de cÃƒÂ¢mera",
   "Grade auricular",
   "Malha de alto-falante",
 ];
@@ -311,24 +312,24 @@ const serviceTypes = [
   "Troca de tela",
   "Troca de vidro traseiro",
   "Troca de tampa traseira",
-  "Troca de câmera traseira",
-  "Troca de câmera frontal",
-  "Troca de lente da câmera",
+  "Troca de cÃƒÂ¢mera traseira",
+  "Troca de cÃƒÂ¢mera frontal",
+  "Troca de lente da cÃƒÂ¢mera",
   "Troca de conector de carga",
   "Troca de alto-falante",
   "Troca de auricular",
   "Troca de microfone",
-  "Troca de botão power",
-  "Troca de botão volume",
+  "Troca de botÃƒÂ£o power",
+  "Troca de botÃƒÂ£o volume",
   "Reparo de Face ID",
   "Reparo de placa",
   "Limpeza interna",
-  "Diagnóstico técnico",
-  "Atualização/restauração",
-  "Remoção de oxidação",
-  "Instalação de película",
-  "Instalação de capinha",
-  "Venda de acessório",
+  "DiagnÃƒÂ³stico tÃƒÂ©cnico",
+  "AtualizaÃƒÂ§ÃƒÂ£o/restauraÃƒÂ§ÃƒÂ£o",
+  "RemoÃƒÂ§ÃƒÂ£o de oxidaÃƒÂ§ÃƒÂ£o",
+  "InstalaÃƒÂ§ÃƒÂ£o de pelÃƒÂ­cula",
+  "InstalaÃƒÂ§ÃƒÂ£o de capinha",
+  "Venda de acessÃƒÂ³rio",
 ];
 
 const seedPhones: Phone[] = [
@@ -344,15 +345,15 @@ const seedPhones: Phone[] = [
     serial: "F2LIP11PRETO",
     faceId: "Sim",
     trueTone: "Sim",
-    telaOriginal: "Não sei",
+    telaOriginal: "NÃƒÂ£o sei",
     bateriaOriginal: "Sim",
-    aberto: "Não sei",
+    aberto: "NÃƒÂ£o sei",
     bloqueio: "Desbloqueado",
-    acompanha: ["Cabo", "Película"],
+    acompanha: ["Cabo", "PelÃƒÂ­cula"],
     custoCompra: 1250,
     custoManutencao: 80,
     precoVenda: 1890,
-    status: "Disponível",
+    status: "DisponÃƒÂ­vel",
     observacoes: "Aparelho vitrine, leve marca lateral.",
   },
   {
@@ -369,7 +370,7 @@ const seedPhones: Phone[] = [
     trueTone: "Sim",
     telaOriginal: "Sim",
     bateriaOriginal: "Sim",
-    aberto: "Não",
+    aberto: "NÃƒÂ£o",
     bloqueio: "Desbloqueado",
     acompanha: ["Caixa", "Cabo"],
     custoCompra: 2100,
@@ -392,14 +393,14 @@ const seedPhones: Phone[] = [
     trueTone: "Sim",
     telaOriginal: "Sim",
     bateriaOriginal: "Sim",
-    aberto: "Não",
+    aberto: "NÃƒÂ£o",
     bloqueio: "Desbloqueado",
     acompanha: ["Caixa", "Cabo", "Capinha"],
     custoCompra: 4200,
     custoManutencao: 120,
     precoVenda: 5390,
     status: "Reservado",
-    observacoes: "Reservado para retirada amanhã.",
+    observacoes: "Reservado para retirada amanhÃƒÂ£.",
   },
 ];
 
@@ -418,7 +419,7 @@ const seedParts: Part[] = [
     minimo: 2,
     localizacao: "Gaveta A1",
     garantia: 90,
-    status: "Disponível",
+    status: "DisponÃƒÂ­vel",
   },
   {
     id: 2,
@@ -434,7 +435,7 @@ const seedParts: Part[] = [
     minimo: 2,
     localizacao: "Caixa T2",
     garantia: 60,
-    status: "Disponível",
+    status: "DisponÃƒÂ­vel",
   },
   {
     id: 3,
@@ -473,7 +474,7 @@ const seedParts: Part[] = [
 const seedClients: Client[] = [
   {
     id: 1,
-    nome: "João Silva",
+    nome: "JoÃƒÂ£o Silva",
     whatsapp: "1199999-1001",
     cpf: "",
     endereco: "Centro",
@@ -482,7 +483,7 @@ const seedClients: Client[] = [
     aberto: 350,
     aparelhos: ["iPhone 11 128GB"],
     servicos: ["Troca de bateria"],
-    pecas: ["Película iPhone 11"],
+    pecas: ["PelÃƒÂ­cula iPhone 11"],
     status: "Inadimplente",
   },
   {
@@ -490,7 +491,7 @@ const seedClients: Client[] = [
     nome: "Maria Santos",
     whatsapp: "1199999-1002",
     cpf: "",
-    endereco: "Jardim América",
+    endereco: "Jardim AmÃƒÂ©rica",
     compras: 2,
     totalComprado: 860,
     aberto: 0,
@@ -523,19 +524,19 @@ const seedServices: ServiceOrder[] = [
   },
   {
     id: 2,
-    cliente: "João Silva",
+    cliente: "JoÃƒÂ£o Silva",
     whatsapp: "1199999-1001",
     modelo: "iPhone 11",
     imei: "356789110000001",
-    problema: "Bateria descarregando rápido.",
-    diagnostico: "Saúde baixa e ciclos altos.",
+    problema: "Bateria descarregando rÃƒÂ¡pido.",
+    diagnostico: "SaÃƒÂºde baixa e ciclos altos.",
     servico: "Troca de bateria",
     peca: "Bateria iPhone 11",
     custoPeca: 78,
     maoObra: 120,
     entrada: 100,
     formaPagamento: "Fiado",
-    status: "Em manutenção",
+    status: "Em manutenÃƒÂ§ÃƒÂ£o",
     prazo: "2026-05-13",
     garantia: 90,
     observacoes: "Cliente pediu entrega no fim do dia.",
@@ -545,8 +546,8 @@ const seedServices: ServiceOrder[] = [
 const seedSales: Sale[] = [
   {
     id: 1,
-    cliente: "João Silva",
-    tipo: "Serviço",
+    cliente: "JoÃƒÂ£o Silva",
+    tipo: "ServiÃƒÂ§o",
     item: "Troca de bateria iPhone 11",
     quantidade: 1,
     unitario: 450,
@@ -561,7 +562,7 @@ const seedSales: Sale[] = [
   {
     id: 2,
     cliente: "Maria Santos",
-    tipo: "Peça",
+    tipo: "PeÃƒÂ§a",
     item: "Tela iPhone 12 OLED instalada",
     quantidade: 1,
     unitario: 650,
@@ -575,13 +576,13 @@ const seedSales: Sale[] = [
   },
   {
     id: 3,
-    cliente: "Cliente balcão",
+    cliente: "Cliente balcÃƒÂ£o",
     tipo: "Celular",
     item: "iPhone 13 128GB Azul",
     quantidade: 1,
     unitario: 2850,
     desconto: 0,
-    pagamento: "Cartão",
+    pagamento: "CartÃƒÂ£o",
     entrada: 2850,
     parcelas: 1,
     vencimento: "2026-05-12",
@@ -602,12 +603,12 @@ const seedPayments: Payment[] = [
   },
   {
     id: 2,
-    cliente: "Cliente balcão",
+    cliente: "Cliente balcÃƒÂ£o",
     venda: "iPhone 13 128GB Azul",
     valor: 2850,
-    forma: "Cartão",
+    forma: "CartÃƒÂ£o",
     data: "2026-05-12",
-    observacoes: "Crédito 1x.",
+    observacoes: "CrÃƒÂ©dito 1x.",
   },
 ];
 
@@ -619,12 +620,12 @@ function LojaDeIphonePage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [categoryFilter, setCategoryFilter] = useState("Todos");
-  const [phones, setPhones] = useState(seedPhones);
-  const [parts, setParts] = useState(seedParts);
-  const [services, setServices] = useState(seedServices);
-  const [clients, setClients] = useState(seedClients);
-  const [sales, setSales] = useState(seedSales);
-  const [payments, setPayments] = useState(seedPayments);
+  const [phones, setPhones] = useState<Phone[]>([]);
+  const [parts, setParts] = useState<Part[]>([]);
+  const [services, setServices] = useState<ServiceOrder[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [newPhone, setNewPhone] = useState({ modelo: "iPhone 11", capacidade: "128GB", cor: "" });
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
   const [newService, setNewService] = useState({
@@ -634,7 +635,7 @@ function LojaDeIphonePage() {
   });
   const [newSale, setNewSale] = useState({
     cliente: "",
-    tipo: "Peça" as Sale["tipo"],
+    tipo: "PeÃƒÂ§a" as Sale["tipo"],
     item: "",
     valor: "",
     entrada: "",
@@ -658,12 +659,16 @@ function LojaDeIphonePage() {
       0,
     );
     const lowStock = parts.filter((item) => item.quantidade <= item.minimo);
-    const availablePhones = phones.filter((item) => item.status === "Disponível").length;
+    const availablePhones = phones.filter((item) => item.status === "DisponÃƒÂ­vel").length;
     const openClients = clients.filter((item) => item.aberto > 0).length;
     const activeServices = services.filter((item) =>
-      ["Recebido", "Em diagnóstico", "Aguardando peça", "Em manutenção", "Pronto"].includes(
-        item.status,
-      ),
+      [
+        "Recebido",
+        "Em diagnÃƒÂ³stico",
+        "Aguardando peÃƒÂ§a",
+        "Em manutenÃƒÂ§ÃƒÂ£o",
+        "Pronto",
+      ].includes(item.status),
     );
     return {
       totalVendido,
@@ -785,16 +790,16 @@ function LojaDeIphonePage() {
       serial: `SN-${Date.now().toString().slice(-6)}`,
       faceId: "Sim",
       trueTone: "Sim",
-      telaOriginal: "Não sei",
-      bateriaOriginal: "Não sei",
-      aberto: "Não sei",
+      telaOriginal: "NÃƒÂ£o sei",
+      bateriaOriginal: "NÃƒÂ£o sei",
+      aberto: "NÃƒÂ£o sei",
       bloqueio: "Desbloqueado",
       acompanha: ["Cabo"],
       custoCompra: 0,
       custoManutencao: 0,
       precoVenda: 0,
-      status: "Disponível",
-      observacoes: "Cadastro rápido. Complete os detalhes no editar.",
+      status: "DisponÃƒÂ­vel",
+      observacoes: "Cadastro rÃƒÂ¡pido. Complete os detalhes no editar.",
     };
     setPhones((items) => [phone, ...items]);
     toast.success("Celular cadastrado");
@@ -808,28 +813,28 @@ function LojaDeIphonePage() {
       modelo: newPart.modelo,
       qualidade: "Premium",
       sku: `${newPart.tipo.slice(0, 3).toUpperCase()}-${newPart.modelo.replace(/\s/g, "-").toUpperCase()}`,
-      fornecedor: "Fornecedor padrão",
+      fornecedor: "Fornecedor padrÃƒÂ£o",
       custo: 0,
       preco: 0,
       precoInstalado: 0,
       quantidade: quantity,
       minimo: 2,
-      localizacao: "Sem localização",
+      localizacao: "Sem localizaÃƒÂ§ÃƒÂ£o",
       garantia: 90,
-      status: quantity <= 0 ? "Sem estoque" : quantity <= 2 ? "Baixo estoque" : "Disponível",
+      status: quantity <= 0 ? "Sem estoque" : quantity <= 2 ? "Baixo estoque" : "DisponÃƒÂ­vel",
     };
     setParts((items) => [part, ...items]);
-    toast.success("Peça cadastrada");
+    toast.success("PeÃƒÂ§a cadastrada");
   }
 
   function addService() {
     const service: ServiceOrder = {
       id: Date.now(),
-      cliente: newService.cliente || "Cliente balcão",
+      cliente: newService.cliente || "Cliente balcÃƒÂ£o",
       whatsapp: "",
       modelo: newService.modelo,
       imei: "",
-      problema: "Aguardando diagnóstico.",
+      problema: "Aguardando diagnÃƒÂ³stico.",
       diagnostico: "Pendente",
       servico: newService.servico,
       peca: "",
@@ -840,10 +845,10 @@ function LojaDeIphonePage() {
       status: "Recebido",
       prazo: today,
       garantia: 90,
-      observacoes: "Ordem criada pelo cadastro rápido.",
+      observacoes: "Ordem criada pelo cadastro rÃƒÂ¡pido.",
     };
     setServices((items) => [service, ...items]);
-    toast.success("Ordem de serviço criada");
+    toast.success("Ordem de serviÃƒÂ§o criada");
   }
 
   function addSale() {
@@ -855,7 +860,7 @@ function LojaDeIphonePage() {
     }
     const sale: Sale = {
       id: Date.now(),
-      cliente: newSale.cliente || "Cliente balcão",
+      cliente: newSale.cliente || "Cliente balcÃƒÂ£o",
       tipo: newSale.tipo,
       item: newSale.item,
       quantidade: 1,
@@ -894,7 +899,7 @@ function LojaDeIphonePage() {
                   ? "Sem estoque"
                   : part.quantidade - 1 <= part.minimo
                     ? "Baixo estoque"
-                    : "Disponível",
+                    : "DisponÃƒÂ­vel",
             }
           : part,
       ),
@@ -907,7 +912,7 @@ function LojaDeIphonePage() {
     id: number,
   ) {
     setter((items) => items.filter((item) => item.id !== id));
-    toast.success("Item excluído");
+    toast.success("Item excluÃƒÂ­do");
   }
 
   function markChargePaid(id: number) {
@@ -916,7 +921,7 @@ function LojaDeIphonePage() {
         item.id === id ? { ...item, status: "Pago", entrada: item.unitario - item.desconto } : item,
       ),
     );
-    toast.success("Cobrança marcada como paga");
+    toast.success("CobranÃƒÂ§a marcada como paga");
   }
 
   return (
@@ -934,7 +939,9 @@ function LojaDeIphonePage() {
             <br />
             <span className="text-primary capitalize">{firstName}</span>
           </h2>
-          <p className="mt-3 text-[11px] text-muted-foreground">Última atualização: hoje</p>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            ÃƒÅ¡ltima atualizaÃƒÂ§ÃƒÂ£o: hoje
+          </p>
         </div>
 
         <nav className="flex flex-col gap-0.5 rounded-2xl bg-surface-muted p-2">
@@ -965,17 +972,17 @@ function LojaDeIphonePage() {
               <BellRing className="h-5 w-5" strokeWidth={1.8} />
             </div>
             <div className="flex-1">
-              <p className="text-[10.5px] text-white/60">Cobranças do mês</p>
+              <p className="text-[10.5px] text-white/60">CobranÃƒÂ§as do mÃƒÂªs</p>
               <p className="mt-0.5 text-[22px] leading-none font-semibold">{charges.length}</p>
             </div>
           </div>
-          <p className="mt-3 text-[10.5px] text-white/60">clientes com pendência</p>
+          <p className="mt-3 text-[10.5px] text-white/60">clientes com pendÃƒÂªncia</p>
           <button
             type="button"
             onClick={() => resetFilters("cobrancas")}
             className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12px] font-medium text-ink transition hover:opacity-95"
           >
-            Ver cobranças <ArrowRight className="h-3.5 w-3.5" />
+            Ver cobranÃƒÂ§as <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </aside>
@@ -1015,7 +1022,7 @@ function LojaDeIphonePage() {
                 title="Sair"
                 onClick={async () => {
                   await signOut();
-                  toast.success("Sessão encerrada");
+                  toast.success("SessÃƒÂ£o encerrada");
                 }}
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-muted text-muted-foreground transition hover:text-destructive"
               >
@@ -1026,7 +1033,7 @@ function LojaDeIphonePage() {
         </header>
 
         <div className="min-w-0 flex-1 rounded-[22px] bg-surface-muted p-4 sm:p-5 md:rounded-[24px] md:p-7">
-          <div className="section-slide min-w-0">
+          <div key={active} className="iphone-step-transition section-slide min-w-0">
             <PageHeader active={active} onPrimary={() => handlePrimary(active, resetFilters)} />
 
             {active === "dashboard" && (
@@ -1052,7 +1059,7 @@ function LojaDeIphonePage() {
                   active === "pecas"
                     ? partTypes.slice(0, 18)
                     : active === "vendas"
-                      ? ["Celular", "Peça", "Serviço", "Combo"]
+                      ? ["Celular", "PeÃƒÂ§a", "ServiÃƒÂ§o", "Combo"]
                       : []
                 }
               />
@@ -1060,7 +1067,7 @@ function LojaDeIphonePage() {
 
             {active === "celulares" && (
               <ModuleCard
-                title="Cadastro rápido de celular"
+                title="Cadastro rÃƒÂ¡pido de celular"
                 icon={Smartphone}
                 action={<Button onClick={addPhone}>Cadastrar celular</Button>}
               >
@@ -1095,17 +1102,17 @@ function LojaDeIphonePage() {
                     "Custos",
                     "Venda",
                     "Status",
-                    "Ações",
+                    "AÃƒÂ§ÃƒÂµes",
                   ]}
                   rows={filteredPhones.map((phone) => [
                     <ItemTitle
                       key="modelo"
                       title={`${phone.modelo} ${phone.capacidade} ${phone.cor}`}
-                      subtitle={`${phone.estado} • ${phone.bloqueio}`}
+                      subtitle={`${phone.estado} Ã¢â‚¬Â¢ ${phone.bloqueio}`}
                     />,
                     phone.imei,
                     `${phone.bateria}%`,
-                    `Face ID ${phone.faceId} • Tela ${phone.telaOriginal}`,
+                    `Face ID ${phone.faceId} Ã¢â‚¬Â¢ Tela ${phone.telaOriginal}`,
                     `${brl(phone.custoCompra + phone.custoManutencao)}`,
                     brl(phone.precoVenda),
                     <StatusPill key="status" status={phone.status} />,
@@ -1118,9 +1125,9 @@ function LojaDeIphonePage() {
             {active === "pecas" && (
               <>
                 <ModuleCard
-                  title="Cadastro rápido de peça"
+                  title="Cadastro rÃƒÂ¡pido de peÃƒÂ§a"
                   icon={Package}
-                  action={<Button onClick={addPart}>Cadastrar peça</Button>}
+                  action={<Button onClick={addPart}>Cadastrar peÃƒÂ§a</Button>}
                 >
                   <div className="grid gap-3 lg:grid-cols-[1fr_1fr_120px]">
                     <SelectLike
@@ -1148,25 +1155,25 @@ function LojaDeIphonePage() {
                 <DataCard>
                   <ResponsiveTable
                     columns={[
-                      "Peça",
+                      "PeÃƒÂ§a",
                       "Qualidade",
                       "Fornecedor",
-                      "Preço",
+                      "PreÃƒÂ§o",
                       "Estoque",
                       "Garantia",
                       "Status",
-                      "Ações",
+                      "AÃƒÂ§ÃƒÂµes",
                     ]}
                     rows={filteredParts.map((part) => [
                       <ItemTitle
                         key="peca"
                         title={`${part.tipo} ${part.modelo}`}
-                        subtitle={`${part.sku} • ${part.localizacao}`}
+                        subtitle={`${part.sku} Ã¢â‚¬Â¢ ${part.localizacao}`}
                       />,
                       part.qualidade,
                       part.fornecedor,
                       `${brl(part.preco)} / instalado ${brl(part.precoInstalado)}`,
-                      `${part.quantidade} un. • mínimo ${part.minimo}`,
+                      `${part.quantidade} un. Ã¢â‚¬Â¢ mÃƒÂ­nimo ${part.minimo}`,
                       `${part.garantia} dias`,
                       <StockPill key="status" part={part} />,
                       <Actions key="actions" onDelete={() => removeById(setParts, part.id)} />,
@@ -1179,7 +1186,7 @@ function LojaDeIphonePage() {
             {active === "servicos" && (
               <>
                 <ModuleCard
-                  title="Nova ordem de serviço"
+                  title="Nova ordem de serviÃƒÂ§o"
                   icon={Wrench}
                   action={<Button onClick={addService}>Criar OS</Button>}
                 >
@@ -1209,11 +1216,11 @@ function LojaDeIphonePage() {
                       "Cliente",
                       "Aparelho",
                       "Problema",
-                      "Serviço",
+                      "ServiÃƒÂ§o",
                       "Valores",
                       "Prazo",
                       "Status",
-                      "Ações",
+                      "AÃƒÂ§ÃƒÂµes",
                     ]}
                     rows={filteredServices.map((service) => {
                       const total = service.custoPeca + service.maoObra;
@@ -1221,7 +1228,7 @@ function LojaDeIphonePage() {
                         <ItemTitle
                           key="cliente"
                           title={service.cliente}
-                          subtitle={service.whatsapp || "WhatsApp não informado"}
+                          subtitle={service.whatsapp || "WhatsApp nÃƒÂ£o informado"}
                         />,
                         <ItemTitle
                           key="modelo"
@@ -1232,9 +1239,9 @@ function LojaDeIphonePage() {
                         <ItemTitle
                           key="servico"
                           title={service.servico}
-                          subtitle={`Peça: ${service.peca || "A definir"}`}
+                          subtitle={`PeÃƒÂ§a: ${service.peca || "A definir"}`}
                         />,
-                        `${brl(total)} • entrada ${brl(service.entrada)}`,
+                        `${brl(total)} Ã¢â‚¬Â¢ entrada ${brl(service.entrada)}`,
                         service.prazo,
                         <StatusPill key="status" status={service.status} />,
                         <Actions
@@ -1253,20 +1260,20 @@ function LojaDeIphonePage() {
                 <ResponsiveTable
                   columns={[
                     "Cliente",
-                    "Histórico",
+                    "HistÃƒÂ³rico",
                     "Compras",
                     "Total comprado",
                     "Em aberto",
                     "Status",
-                    "Ações",
+                    "AÃƒÂ§ÃƒÂµes",
                   ]}
                   rows={filteredClients.map((client) => [
                     <ItemTitle
                       key="cliente"
                       title={client.nome}
-                      subtitle={`${client.whatsapp} • ${client.endereco || "Sem endereço"}`}
+                      subtitle={`${client.whatsapp} Ã¢â‚¬Â¢ ${client.endereco || "Sem endereÃƒÂ§o"}`}
                     />,
-                    `${client.aparelhos.join(", ") || "Sem aparelhos"} • ${client.servicos.join(", ") || "Sem serviços"}`,
+                    `${client.aparelhos.join(", ") || "Sem aparelhos"} Ã¢â‚¬Â¢ ${client.servicos.join(", ") || "Sem serviÃƒÂ§os"}`,
                     String(client.compras),
                     brl(client.totalComprado),
                     brl(client.aberto),
@@ -1293,10 +1300,10 @@ function LojaDeIphonePage() {
                     <SelectLike
                       value={newSale.tipo}
                       onChange={(value) => setNewSale({ ...newSale, tipo: value as Sale["tipo"] })}
-                      options={["Celular", "Peça", "Serviço", "Combo"]}
+                      options={["Celular", "PeÃƒÂ§a", "ServiÃƒÂ§o", "Combo"]}
                     />
                     <Input
-                      placeholder="Produto/peça/serviço"
+                      placeholder="Produto/peÃƒÂ§a/serviÃƒÂ§o"
                       value={newSale.item}
                       onChange={(event) => setNewSale({ ...newSale, item: event.target.value })}
                     />
@@ -1327,16 +1334,16 @@ function LojaDeIphonePage() {
                       "Entrada",
                       "Lucro",
                       "Status",
-                      "Ações",
+                      "AÃƒÂ§ÃƒÂµes",
                     ]}
                     rows={filteredSales.map((sale) => [
                       sale.cliente,
                       <ItemTitle
                         key="item"
                         title={sale.item}
-                        subtitle={`${sale.tipo} • ${sale.quantidade} un.`}
+                        subtitle={`${sale.tipo} Ã¢â‚¬Â¢ ${sale.quantidade} un.`}
                       />,
-                      `${sale.pagamento} • ${sale.parcelas}x`,
+                      `${sale.pagamento} Ã¢â‚¬Â¢ ${sale.parcelas}x`,
                       brl(sale.unitario * sale.quantidade - sale.desconto),
                       brl(sale.entrada),
                       brl(sale.lucro),
@@ -1357,8 +1364,8 @@ function LojaDeIphonePage() {
                     "Valor pago",
                     "Forma",
                     "Data",
-                    "Observações",
-                    "Ações",
+                    "ObservaÃƒÂ§ÃƒÂµes",
+                    "AÃƒÂ§ÃƒÂµes",
                   ]}
                   rows={filteredPayments.map((payment) => [
                     payment.cliente,
@@ -1377,7 +1384,7 @@ function LojaDeIphonePage() {
               <>
                 <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <MiniMetric
-                    title="Cobranças de hoje"
+                    title="CobranÃƒÂ§as de hoje"
                     value={String(charges.filter((item) => item.vencimento === today).length)}
                     icon={BellRing}
                   />
@@ -1416,7 +1423,14 @@ function LojaDeIphonePage() {
                 </div>
                 <DataCard>
                   <ResponsiveTable
-                    columns={["Cliente", "Referência", "Vencimento", "Valor", "Status", "Ações"]}
+                    columns={[
+                      "Cliente",
+                      "ReferÃƒÂªncia",
+                      "Vencimento",
+                      "Valor",
+                      "Status",
+                      "AÃƒÂ§ÃƒÂµes",
+                    ]}
                     rows={filteredCharges.map((charge) => [
                       charge.cliente,
                       charge.item,
@@ -1431,7 +1445,7 @@ function LojaDeIphonePage() {
                           icon={BellRing}
                           label="WhatsApp"
                           onClick={() => {
-                            const message = `Olá, ${charge.cliente}. Tudo bem? Passando para lembrar que ficou um valor em aberto de ${brl(charge.aberto)} referente à sua compra/serviço na loja. O vencimento é ${charge.vencimento}. Pode me confirmar quando consegue realizar o pagamento?`;
+                            const message = `Ola, ${charge.cliente}. Tudo bem? Passando para lembrar que ficou um valor em aberto de ${brl(charge.aberto)} referente a sua compra/servico na loja. O vencimento e ${charge.vencimento}. Pode me confirmar quando consegue realizar o pagamento?`;
                             window.open(
                               `https://wa.me/?text=${encodeURIComponent(message)}`,
                               "_blank",
@@ -1446,7 +1460,7 @@ function LojaDeIphonePage() {
                         <ActionButton
                           icon={PenLine}
                           label="Renegociar"
-                          onClick={() => toast.success("Renegociação anotada")}
+                          onClick={() => toast.success("RenegociaÃƒÂ§ÃƒÂ£o anotada")}
                         />
                       </div>,
                     ])}
@@ -1488,7 +1502,7 @@ function DashboardView({
   clients: Client[];
   sales: Sale[];
 }) {
-  const categoryTotals = ["Celular", "Peça", "Serviço"].map((category) => ({
+  const categoryTotals = ["Celular", "PeÃƒÂ§a", "ServiÃƒÂ§o"].map((category) => ({
     label: category,
     value: sales
       .filter((sale) => sale.tipo === category)
@@ -1496,10 +1510,10 @@ function DashboardView({
   }));
   const maxCategory = Math.max(...categoryTotals.map((item) => item.value), 1);
   const months = [
-    { label: "Jan", recebido: 12200, fiado: 3100 },
-    { label: "Fev", recebido: 16400, fiado: 4200 },
-    { label: "Mar", recebido: 9800, fiado: 2500 },
-    { label: "Abr", recebido: 18400, fiado: 5100 },
+    { label: "Jan", recebido: 0, fiado: 0 },
+    { label: "Fev", recebido: 0, fiado: 0 },
+    { label: "Mar", recebido: 0, fiado: 0 },
+    { label: "Abr", recebido: 0, fiado: 0 },
     { label: "Mai", recebido: totals.totalRecebido, fiado: totals.totalFiado },
   ];
   const chartMax = Math.max(...months.map((item) => Math.max(item.recebido, item.fiado)), 1);
@@ -1508,13 +1522,13 @@ function DashboardView({
     <div className="motion-list flex min-w-0 flex-col gap-4 sm:gap-6">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Total vendido no mês"
+          title="Total vendido no mÃƒÂªs"
           value={brl(totals.totalVendido)}
-          subtitle="Celulares, peças e serviços"
+          subtitle="Celulares, peÃƒÂ§as e serviÃƒÂ§os"
           icon={BadgeDollarSign}
         />
         <MetricCard
-          title="Total recebido no mês"
+          title="Total recebido no mÃƒÂªs"
           value={brl(totals.totalRecebido)}
           subtitle="Pagamentos confirmados"
           icon={Wallet}
@@ -1527,7 +1541,7 @@ function DashboardView({
           dark
         />
         <MetricCard
-          title="Lucro estimado do mês"
+          title="Lucro estimado do mÃƒÂªs"
           value={brl(totals.lucro)}
           subtitle="Margem prevista"
           icon={TrendingUp}
@@ -1536,18 +1550,18 @@ function DashboardView({
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MiniMetric
-          title="Peças com estoque baixo"
+          title="PeÃƒÂ§as com estoque baixo"
           value={String(totals.lowStock.length)}
           icon={Package}
           tone="warning"
         />
         <MiniMetric
-          title="Serviços em andamento"
+          title="ServiÃƒÂ§os em andamento"
           value={String(totals.activeServices.length)}
           icon={Wrench}
         />
         <MiniMetric
-          title="Aparelhos disponíveis"
+          title="Aparelhos disponÃƒÂ­veis"
           value={String(totals.availablePhones)}
           icon={Smartphone}
         />
@@ -1555,18 +1569,22 @@ function DashboardView({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-        <DataCard title="Receita x Fiado dos últimos 5 meses">
+        <DataCard title="Receita x Fiado dos ÃƒÂºltimos 5 meses">
           <div className="grid min-h-[250px] grid-cols-5 items-end gap-5 px-2 pt-6">
             {months.map((month) => (
               <div key={month.label} className="flex h-full flex-col justify-end gap-3">
                 <div className="flex flex-1 items-end justify-center gap-2">
                   <span
                     className="w-3 rounded-full bg-primary"
-                    style={{ height: `${Math.max(12, (month.recebido / chartMax) * 170)}px` }}
+                    style={{
+                      height: `${month.recebido > 0 ? Math.max(12, (month.recebido / chartMax) * 170) : 4}px`,
+                    }}
                   />
                   <span
                     className="w-3 rounded-full bg-border"
-                    style={{ height: `${Math.max(12, (month.fiado / chartMax) * 170)}px` }}
+                    style={{
+                      height: `${month.fiado > 0 ? Math.max(12, (month.fiado / chartMax) * 170) : 4}px`,
+                    }}
                   />
                 </div>
                 <span className="text-center text-[11px] font-medium text-muted-foreground">
@@ -1588,7 +1606,9 @@ function DashboardView({
                 <div className="h-2 rounded-full bg-surface-muted">
                   <div
                     className="h-2 rounded-full bg-primary"
-                    style={{ width: `${Math.max(8, (item.value / maxCategory) * 100)}%` }}
+                    style={{
+                      width: `${item.value > 0 ? Math.max(8, (item.value / maxCategory) * 100) : 0}%`,
+                    }}
                   />
                 </div>
               </div>
@@ -1598,20 +1618,13 @@ function DashboardView({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <DataCard title="Peças mais vendidas">
-          <RankList
-            items={[
-              "Bateria iPhone 11",
-              "Tela iPhone 12 OLED",
-              "Película iPhone 14",
-              "Capinha MagSafe",
-            ]}
-          />
+        <DataCard title="PeÃƒÂ§as mais vendidas">
+          <RankList items={[]} />
         </DataCard>
         <DataCard title="Modelos de iPhone mais vendidos">
-          <RankList items={["iPhone 13", "iPhone 11", "iPhone 14 Pro Max", "iPhone 12"]} />
+          <RankList items={[]} />
         </DataCard>
-        <DataCard title="Cobranças pendentes por cliente">
+        <DataCard title="CobranÃƒÂ§as pendentes por cliente">
           <RankList
             items={clients
               .filter((client) => client.aberto > 0)
@@ -1634,9 +1647,9 @@ function DashboardView({
               ])}
           />
         </DataCard>
-        <DataCard title="Serviços ativos">
+        <DataCard title="ServiÃƒÂ§os ativos">
           <ResponsiveTable
-            columns={["Cliente", "Modelo", "Serviço", "Status"]}
+            columns={["Cliente", "Modelo", "ServiÃƒÂ§o", "Status"]}
             rows={services
               .slice(0, 4)
               .map((service) => [
@@ -1662,7 +1675,7 @@ function StockView({
   totals: ReturnType<typeof computeTotalsShape>;
 }) {
   const accessoryStock = parts.filter((item) =>
-    ["Película", "Capinha", "Cabo", "Carregador"].includes(item.tipo),
+    ["PelÃƒÂ­cula", "Capinha", "Cabo", "Carregador"].includes(item.tipo),
   );
   return (
     <div className="motion-list flex flex-col gap-4">
@@ -1674,15 +1687,15 @@ function StockView({
           icon={Smartphone}
         />
         <MetricCard
-          title="Estoque de peças"
+          title="Estoque de peÃƒÂ§as"
           value={String(parts.reduce((acc, item) => acc + item.quantidade, 0))}
-          subtitle="Unidades disponíveis"
+          subtitle="Unidades disponÃƒÂ­veis"
           icon={Package}
         />
         <MetricCard
-          title="Acessórios"
+          title="AcessÃƒÂ³rios"
           value={String(accessoryStock.reduce((acc, item) => acc + item.quantidade, 0))}
-          subtitle="Capinhas, cabos e películas"
+          subtitle="Capinhas, cabos e pelÃƒÂ­culas"
           icon={Boxes}
         />
         <MetricCard
@@ -1693,7 +1706,7 @@ function StockView({
           dark
         />
       </div>
-      <DataCard title="Movimentação e alertas">
+      <DataCard title="MovimentaÃƒÂ§ÃƒÂ£o e alertas">
         <ResponsiveTable
           columns={["Tipo", "Item", "Estoque", "Local", "Status"]}
           rows={parts.map((part) => [
@@ -1728,14 +1741,14 @@ function ReportsView({
     [
       "Vendas por categoria",
       sales.map((sale) => sale.tipo).join(", "),
-      "Celulares, peças e serviços",
+      "Celulares, peÃƒÂ§as e serviÃƒÂ§os",
     ],
     ["Vendas por modelo de iPhone", "iPhone 13, iPhone 11, iPhone 14 Pro Max", "Top modelos"],
-    ["Peças mais vendidas", "Bateria, Tela, Película", "Ranking operacional"],
+    ["PeÃƒÂ§as mais vendidas", "Bateria, Tela, PelÃƒÂ­cula", "Ranking operacional"],
     [
-      "Serviços mais feitos",
+      "ServiÃƒÂ§os mais feitos",
       services.map((service) => service.servico).join(", "),
-      "Assistência técnica",
+      "AssistÃƒÂªncia tÃƒÂ©cnica",
     ],
     ["Clientes que mais compram", clients.map((client) => client.nome).join(", "), "Base ativa"],
     [
@@ -1744,7 +1757,7 @@ function ReportsView({
         .filter((client) => client.aberto > 0)
         .map((client) => client.nome)
         .join(", "),
-      "Cobrança",
+      "CobranÃƒÂ§a",
     ],
     [
       "Estoque baixo",
@@ -1752,7 +1765,7 @@ function ReportsView({
         .filter((part) => part.quantidade <= part.minimo)
         .map((part) => part.tipo)
         .join(", "),
-      "Reposição",
+      "ReposiÃƒÂ§ÃƒÂ£o",
     ],
     ["Margem por produto", brl(totals.lucroPotencial), "Potencial de estoque"],
     ["Total fiado", brl(totals.totalFiado), "Em aberto"],
@@ -1760,8 +1773,8 @@ function ReportsView({
   ];
 
   return (
-    <DataCard title="Relatórios da loja de iPhone">
-      <ResponsiveTable columns={["Relatório", "Valor/Resumo", "Uso"]} rows={reportRows} />
+    <DataCard title="RelatÃƒÂ³rios da loja de iPhone">
+      <ResponsiveTable columns={["RelatÃƒÂ³rio", "Valor/Resumo", "Uso"]} rows={reportRows} />
     </DataCard>
   );
 }
@@ -1769,27 +1782,27 @@ function ReportsView({
 function SettingsView() {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-      <DataCard title="Configurações da V2">
+      <DataCard title="ConfiguraÃƒÂ§ÃƒÂµes da V2">
         <div className="grid gap-4">
           <Field label="Nome da loja" value="Fiado iPhones" />
-          <Field label="WhatsApp padrão de cobrança" value="(11) 99999-0000" />
-          <Field label="Garantia padrão de serviços" value="90 dias" />
-          <Field label="Estoque mínimo padrão" value="2 unidades" />
+          <Field label="WhatsApp padrÃƒÂ£o de cobranÃƒÂ§a" value="(11) 99999-0000" />
+          <Field label="Garantia padrÃƒÂ£o de serviÃƒÂ§os" value="90 dias" />
+          <Field label="Estoque mÃƒÂ­nimo padrÃƒÂ£o" value="2 unidades" />
           <Textarea
             className="min-h-[120px] rounded-2xl bg-surface"
-            defaultValue="Olá, [nome]. Tudo bem? Passando para lembrar que ficou um valor em aberto de R$ [valor] referente à sua compra/serviço na loja. O vencimento é [data]. Pode me confirmar quando consegue realizar o pagamento?"
+            defaultValue="OlÃƒÂ¡, [nome]. Tudo bem? Passando para lembrar que ficou um valor em aberto de R$ [valor] referente ÃƒÂ  sua compra/serviÃƒÂ§o na loja. O vencimento ÃƒÂ© [data]. Pode me confirmar quando consegue realizar o pagamento?"
           />
-          <Button onClick={() => toast.success("Configurações salvas")}>
-            Salvar configurações
+          <Button onClick={() => toast.success("ConfiguraÃƒÂ§ÃƒÂµes salvas")}>
+            Salvar configuraÃƒÂ§ÃƒÂµes
           </Button>
         </div>
       </DataCard>
-      <DataCard title="Regras automáticas">
+      <DataCard title="Regras automÃƒÂ¡ticas">
         <div className="grid gap-3 text-sm">
           {[
-            "Baixar estoque automaticamente ao vender peça ou celular.",
-            "Calcular lucro por aparelho, peça e serviço.",
-            "Gerar cobrança para vendas fiadas e entrada + parcelas.",
+            "Baixar estoque automaticamente ao vender peÃƒÂ§a ou celular.",
+            "Calcular lucro por aparelho, peÃƒÂ§a e serviÃƒÂ§o.",
+            "Gerar cobranÃƒÂ§a para vendas fiadas e entrada + parcelas.",
             "Sinalizar estoque baixo com selo amarelo/vermelho.",
             "Separar clientes VIP, ativos e inadimplentes.",
           ].map((item) => (
@@ -1807,22 +1820,27 @@ function SettingsView() {
 function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => void }) {
   const title = tabs.find((item) => item.id === active)?.label ?? "Dashboard";
   const copy: Record<TabId, string> = {
-    dashboard: "Visão completa da loja: vendas, assistência, estoque, lucro e cobranças.",
-    celulares: "Cadastre iPhones com IMEI, bateria, origem, custos, acessórios e status de venda.",
-    pecas: "Controle peças por modelo, qualidade, fornecedor, preço, garantia e estoque.",
-    servicos: "Ordens de serviço com diagnóstico, peça usada, mão de obra, prazo e garantia.",
-    clientes: "Histórico de aparelhos, serviços, peças compradas e valores em aberto.",
-    vendas: "Venda celular, peça, serviço ou combo com baixa de estoque e cálculo de lucro.",
+    dashboard: "VisÃƒÂ£o completa da loja: vendas, assistÃƒÂªncia, estoque, lucro e cobranÃƒÂ§as.",
+    celulares:
+      "Cadastre iPhones com IMEI, bateria, origem, custos, acessÃƒÂ³rios e status de venda.",
+    pecas: "Controle peÃƒÂ§as por modelo, qualidade, fornecedor, preÃƒÂ§o, garantia e estoque.",
+    servicos:
+      "Ordens de serviÃƒÂ§o com diagnÃƒÂ³stico, peÃƒÂ§a usada, mÃƒÂ£o de obra, prazo e garantia.",
+    clientes: "HistÃƒÂ³rico de aparelhos, serviÃƒÂ§os, peÃƒÂ§as compradas e valores em aberto.",
+    vendas:
+      "Venda celular, peÃƒÂ§a, serviÃƒÂ§o ou combo com baixa de estoque e cÃƒÂ¡lculo de lucro.",
     pagamentos: "Entradas e pagamentos vinculados a vendas, clientes e comprovantes.",
-    cobrancas: "Cobranças de hoje, vencidas e próximas com mensagem pronta para WhatsApp.",
-    estoque: "Visão de aparelhos, peças, acessórios, movimentação e lucro potencial.",
-    relatorios: "Faturamento, margem, ranking de peças, modelos, serviços e inadimplência.",
-    configuracoes: "Preferências da V2 para loja de iPhones e assistência técnica.",
+    cobrancas: "CobranÃƒÂ§as de hoje, vencidas e prÃƒÂ³ximas com mensagem pronta para WhatsApp.",
+    estoque:
+      "VisÃƒÂ£o de aparelhos, peÃƒÂ§as, acessÃƒÂ³rios, movimentaÃƒÂ§ÃƒÂ£o e lucro potencial.",
+    relatorios:
+      "Faturamento, margem, ranking de peÃƒÂ§as, modelos, serviÃƒÂ§os e inadimplÃƒÂªncia.",
+    configuracoes: "PreferÃƒÂªncias da V2 para loja de iPhones e assistÃƒÂªncia tÃƒÂ©cnica.",
   };
   const button: Partial<Record<TabId, string>> = {
     celulares: "+ Novo celular",
-    pecas: "+ Nova peça",
-    servicos: "+ Novo serviço",
+    pecas: "+ Nova peÃƒÂ§a",
+    servicos: "+ Novo serviÃƒÂ§o",
     vendas: "+ Nova venda",
   };
   return (
@@ -1868,7 +1886,7 @@ function Filters({
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           className="h-11 rounded-full bg-surface-muted pl-9"
-          placeholder="Buscar por nome, modelo, IMEI, cliente, peça, status ou valor"
+          placeholder="Buscar por nome, modelo, IMEI, cliente, peÃƒÂ§a, status ou valor"
         />
       </div>
       <SelectLike
@@ -1876,12 +1894,12 @@ function Filters({
         onChange={onStatus}
         options={[
           "Todos",
-          "Disponível",
+          "DisponÃƒÂ­vel",
           "Baixo estoque",
           "Sem estoque",
           "Vendido",
           "Reservado",
-          "Em manutenção",
+          "Em manutenÃƒÂ§ÃƒÂ£o",
           "Pago",
           "Parcial",
           "Em aberto",
@@ -2075,11 +2093,11 @@ function ItemTitle({ title, subtitle }: { title: string; subtitle: string }) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  const tone = ["Pago", "Disponível", "Entregue", "VIP", "Ativo"].includes(status)
+  const tone = ["Pago", "DisponÃƒÂ­vel", "Entregue", "VIP", "Ativo"].includes(status)
     ? "bg-success/10 text-success"
     : ["Atrasado", "Inadimplente", "Bloqueado", "Sem estoque", "Cancelado"].includes(status)
       ? "bg-destructive/10 text-destructive"
-      : ["Baixo estoque", "Aguardando peça", "Reservado", "Parcial"].includes(status)
+      : ["Baixo estoque", "Aguardando peÃƒÂ§a", "Reservado", "Parcial"].includes(status)
         ? "bg-warning/15 text-warning"
         : "bg-primary/10 text-primary";
   return (
@@ -2102,11 +2120,15 @@ function StockPill({ part }: { part: Part }) {
 function Actions({ onDelete }: { onDelete: () => void }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
-      <ActionButton icon={Eye} label="Ver" onClick={() => toast.success("Visualização aberta")} />
+      <ActionButton
+        icon={Eye}
+        label="Ver"
+        onClick={() => toast.success("VisualizaÃƒÂ§ÃƒÂ£o aberta")}
+      />
       <ActionButton
         icon={PenLine}
         label="Editar"
-        onClick={() => toast.success("Edição pronta para conectar")}
+        onClick={() => toast.success("EdiÃƒÂ§ÃƒÂ£o pronta para conectar")}
       />
       <ActionButton
         icon={BadgeDollarSign}
@@ -2174,9 +2196,9 @@ function GeneratedPartsPreview() {
     "Bateria",
     "Tela frontal",
     "Tampa traseira",
-    "Câmera traseira",
+    "CÃƒÂ¢mera traseira",
     "Flex de carga",
-    "Película",
+    "PelÃƒÂ­cula",
     "Capinha",
   ].flatMap((type) =>
     [
@@ -2194,7 +2216,7 @@ function GeneratedPartsPreview() {
       <div className="mb-3 flex items-center gap-2">
         <ClipboardList className="h-4 w-4 text-primary" />
         <h2 className="text-sm font-semibold text-foreground">
-          Combinações automáticas por modelo
+          CombinaÃƒÂ§ÃƒÂµes automÃƒÂ¡ticas por modelo
         </h2>
       </div>
       <div className="no-scrollbar flex gap-2 overflow-x-auto">
@@ -2229,11 +2251,11 @@ function handlePrimary(active: TabId, resetFilters: (tab: TabId) => void) {
   resetFilters(active);
   toast.success(
     active === "celulares"
-      ? "Use o cadastro rápido de celular"
+      ? "Use o cadastro rÃƒÂ¡pido de celular"
       : active === "pecas"
-        ? "Use o cadastro rápido de peça"
+        ? "Use o cadastro rÃƒÂ¡pido de peÃƒÂ§a"
         : active === "servicos"
-          ? "Use a nova ordem de serviço"
+          ? "Use a nova ordem de serviÃƒÂ§o"
           : "Use o cadastro de venda",
   );
 }
