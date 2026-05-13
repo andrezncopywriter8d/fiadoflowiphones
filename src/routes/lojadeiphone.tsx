@@ -292,7 +292,7 @@ type ImeiCheckResult = {
   imei: string;
   checkedAt: string;
   certificateId: string;
-  source: "IMEI.EU API" | "Pre-check local";
+  source: "ImeiCheck TAC publico" | "IMEI.EU API" | "Pre-check local";
   status: "Aprovado" | "Atenção" | "Pre-check";
   brand?: string;
   model?: string;
@@ -1340,14 +1340,58 @@ function LojaDeIphonePage() {
       blacklisted: null,
       notes: [
         "IMEI passou na validação matemática Luhn.",
-        "Para procedência completa, configure uma chave de API IMEI.EU.",
+        "O sistema tenta primeiro uma consulta publica de marca/modelo. Blacklist completa pode exigir provedor com chave.",
       ],
     };
 
     try {
+      try {
+        const publicTacParams = new URLSearchParams({ imei, format: "json" });
+        const publicTacResponse = await fetch(
+          `https://alpha.imeicheck.com/api/modelBrandName?${publicTacParams.toString()}`,
+        );
+
+        if (publicTacResponse.ok) {
+          const publicTacJson = await publicTacResponse.json();
+          const brand =
+            publicTacJson.brand ||
+            publicTacJson.Brand ||
+            publicTacJson.manufacturer ||
+            publicTacJson.Manufacturer;
+          const model =
+            publicTacJson.model || publicTacJson.Model || publicTacJson.name || publicTacJson.Name;
+
+          if (brand || model) {
+            setImeiResult({
+              ...baseResult,
+              source: "ImeiCheck TAC publico",
+              status: "Pre-check",
+              brand,
+              model,
+              name: [brand, model].filter(Boolean).join(" "),
+              notes: [
+                "IMEI passou na validação matemática Luhn.",
+                `Marca/modelo retornado pela consulta publica: ${[brand, model].filter(Boolean).join(" ") || "nao informado"}.`,
+                "Esta consulta identifica aparelho por TAC/modelo. Para blacklist, iCloud e bloqueio, use uma consulta completa.",
+              ],
+            });
+            toast.success("Consulta publica de modelo concluida");
+            return;
+          }
+        }
+      } catch {
+        // Continua para o provedor com chave ou pre-check local.
+      }
+
       if (!imeiApiKey.trim()) {
-        setImeiResult(baseResult);
-        toast.success("Pre-check gerado. Adicione uma chave para consultar procedência online.");
+        setImeiResult({
+          ...baseResult,
+          notes: [
+            ...baseResult.notes,
+            "A consulta publica sem chave pode ser bloqueada por protecao anti-abuso. Ainda assim, o certificado manual pode ser gerado com o pre-check local.",
+          ],
+        });
+        toast.success("Pre-check gerado. Consulta completa requer provedor com chave.");
         return;
       }
 
@@ -3369,8 +3413,8 @@ function ImeiLookupCard({
               Consulta de IMEI e certificado
             </h2>
             <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
-              Valida o IMEI, consulta marca/modelo e blacklist pela API IMEI.EU quando houver chave,
-              e gera um certificado de procedência para o aparelho.
+              Valida o IMEI, tenta consultar marca/modelo por provedor publico e gera um certificado
+              de procedência para o aparelho.
             </p>
           </div>
         </div>
@@ -3418,15 +3462,15 @@ function ImeiLookupCard({
         </Label>
 
         <Label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-          Chave da API IMEI.EU
+          Chave opcional para consulta completa
           <Input
             value={apiKey}
             type="password"
-            placeholder="Cole sua API key gratuita/teste aqui"
+            placeholder="Cole uma chave de provedor IMEI, se tiver"
             onChange={(event) => onApiKeyChange(event.target.value)}
             className="h-11 rounded-2xl bg-surface-muted"
           />
-          <span>Sem chave, o sistema gera apenas pre-check local e certificado manual.</span>
+          <span>Sem chave, o sistema tenta consulta publica e mantém o pre-check local.</span>
         </Label>
       </div>
 
