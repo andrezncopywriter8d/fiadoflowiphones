@@ -870,6 +870,49 @@ function LojaDeIphonePage() {
     setCategoryFilter("Todos");
   }
 
+  function focusSection(sectionId: string) {
+    window.requestAnimationFrame(() => {
+      const section = document.getElementById(sectionId);
+      section?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const firstField = section?.querySelector<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >("input:not([readonly]), select, textarea");
+      window.setTimeout(() => firstField?.focus(), 360);
+    });
+  }
+
+  function startPrimaryFlow() {
+    if (active === "celulares") {
+      setNewPhone((current) => ({ ...current, cor: current.cor || "Preto" }));
+      focusSection("iphone-phone-form");
+      toast.success("Cadastro de celular pronto para preencher");
+      return;
+    }
+
+    if (active === "pecas") {
+      setStockProduct((current) => ({
+        ...current,
+        kind: "Peça",
+        tipo: current.tipo || "Bateria",
+        modelo: current.modelo || "iPhone 11",
+      }));
+      focusSection("iphone-stock-product-form");
+      toast.success("Cadastro de peça pronto para preencher");
+      return;
+    }
+
+    if (active === "servicos") {
+      focusSection("iphone-service-form");
+      toast.success("Ordem de serviço pronta para preencher");
+      return;
+    }
+
+    if (active === "vendas") {
+      focusSection("iphone-sale-form");
+      toast.success("Venda pronta para preencher");
+    }
+  }
+
   function addPhone() {
     const phone: Phone = {
       id: Date.now(),
@@ -1307,7 +1350,7 @@ function LojaDeIphonePage() {
 
         <div className="min-w-0 flex-1 rounded-[22px] bg-surface-muted p-4 sm:p-5 md:rounded-[24px] md:p-7">
           <div key={active} className="iphone-step-transition section-slide min-w-0">
-            <PageHeader active={active} onPrimary={() => handlePrimary(active, resetFilters)} />
+            <PageHeader active={active} onPrimary={startPrimaryFlow} />
 
             {active === "dashboard" && (
               <DashboardView
@@ -1356,6 +1399,7 @@ function LojaDeIphonePage() {
                   onCertificate={generateImeiCertificate}
                 />
                 <ModuleCard
+                  id="iphone-phone-form"
                   title="Cadastro rápido de celular"
                   icon={Smartphone}
                   action={<Button onClick={addPhone}>Cadastrar celular</Button>}
@@ -1415,6 +1459,7 @@ function LojaDeIphonePage() {
             {active === "pecas" && (
               <>
                 <StockProductFormCard
+                  id="iphone-stock-product-form"
                   form={stockProduct}
                   onChange={(patch) => setStockProduct((current) => ({ ...current, ...patch }))}
                   onSave={saveStockProduct}
@@ -1484,6 +1529,7 @@ function LojaDeIphonePage() {
             {active === "servicos" && (
               <>
                 <ModuleCard
+                  id="iphone-service-form"
                   title="Nova ordem de serviço"
                   icon={Wrench}
                   action={<Button onClick={addService}>Criar OS</Button>}
@@ -1585,6 +1631,7 @@ function LojaDeIphonePage() {
             {active === "vendas" && (
               <>
                 <ModuleCard
+                  id="iphone-sale-form"
                   title="Nova venda"
                   icon={BadgeDollarSign}
                   action={<Button onClick={addSale}>Registrar venda</Button>}
@@ -2256,11 +2303,13 @@ function ImeiLookupCard({
 }
 
 function StockProductFormCard({
+  id,
   form,
   onChange,
   onSave,
   onReset,
 }: {
+  id?: string;
   form: StockProductForm;
   onChange: (patch: Partial<StockProductForm>) => void;
   onSave: () => void;
@@ -2274,7 +2323,10 @@ function StockProductFormCard({
   const isPhone = form.kind === "Aparelho";
 
   return (
-    <section className="mb-4 overflow-hidden rounded-[24px] bg-surface shadow-soft">
+    <section
+      id={id}
+      className="mb-4 scroll-mt-6 overflow-hidden rounded-[24px] bg-surface shadow-soft"
+    >
       <div className="border-b border-border/70 p-4 sm:p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-start gap-3">
@@ -2870,18 +2922,20 @@ function MiniMetric({
 }
 
 function ModuleCard({
+  id,
   title,
   icon: Icon,
   action,
   children,
 }: {
+  id?: string;
   title: string;
   icon: typeof LayoutGrid;
   action: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 rounded-[24px] bg-surface p-4 shadow-soft">
+    <div id={id} className="mb-4 scroll-mt-6 rounded-[24px] bg-surface p-4 shadow-soft">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-primary" />
@@ -3246,19 +3300,6 @@ function searchIn(fields: unknown[], query: string) {
     String(field ?? "")
       .toLowerCase()
       .includes(term),
-  );
-}
-
-function handlePrimary(active: TabId, resetFilters: (tab: TabId) => void) {
-  resetFilters(active);
-  toast.success(
-    active === "celulares"
-      ? "Use o cadastro rápido de celular"
-      : active === "pecas"
-        ? "Use o cadastro rápido de peça"
-        : active === "servicos"
-          ? "Use a nova ordem de serviço"
-          : "Use o cadastro de venda",
   );
 }
 
