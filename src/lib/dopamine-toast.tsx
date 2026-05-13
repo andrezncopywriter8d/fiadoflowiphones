@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import appLogo from "@/assets/fiado-logo.png";
+import saleSoundUrl from "@/assets/sale-sound.mp3";
 import { brl } from "@/lib/format";
 
 type DopamineToastKind = "sale" | "charge";
@@ -42,6 +43,16 @@ export function showDopamineToast({
   );
 }
 
+function playSaleSound() {
+  if (typeof window === "undefined") return;
+
+  const audio = new Audio(saleSoundUrl);
+  audio.volume = 0.85;
+  audio.play().catch(() => {
+    // Browsers may block sound if the sale was not triggered by a user action.
+  });
+}
+
 export function notifyNewSale({
   clientName,
   amount,
@@ -51,10 +62,11 @@ export function notifyNewSale({
   amount: number;
   payment: string;
 }) {
+  playSaleSound();
   showDopamineToast({
     kind: "sale",
     title: "Venda registrada!",
-    description: `${clientName} • ${payment}`,
+    description: `${clientName} - ${payment}`,
     amount,
   });
 }
@@ -71,7 +83,7 @@ export function notifyChargeSent({
   showDopamineToast({
     kind: "charge",
     title: "Cobrança enviada!",
-    description: `${clientName} • ${product}`,
+    description: `${clientName} - ${product}`,
     amount,
   });
 }
