@@ -185,6 +185,46 @@ type Payment = {
   observacoes: string;
 };
 
+type StockKind = "Aparelho" | "Acessorio" | "Peca";
+
+type StockProductForm = {
+  kind: StockKind;
+  codigo: string;
+  tipo: string;
+  sku: string;
+  dataEntrada: string;
+  nome: string;
+  categoria: string;
+  marca: string;
+  modelo: string;
+  imei: string;
+  imei2: string;
+  serial: string;
+  codigoBarras: string;
+  disponibilidade: string;
+  cor: string;
+  gb: string;
+  memoriaRam: string;
+  subcategoria: string;
+  quantidade: string;
+  quantidadeMinima: string;
+  valorCusto: string;
+  valorVenda: string;
+  diasGarantia: string;
+  fornecedor: string;
+  observacao: string;
+  tags: string;
+  cest: string;
+  ncm: string;
+  origem: string;
+  cst: string;
+  cfopSaidaEstadual: string;
+  cfopSaidaInterestadual: string;
+  cfopEntradaEstadual: string;
+  cfopEntradaInterestadual: string;
+  tributacao: string;
+};
+
 const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
   { id: "celulares", label: "Celulares", icon: Smartphone },
@@ -612,7 +652,45 @@ const seedPayments: Payment[] = [
   },
 ];
 
-const today = "2026-05-12";
+const today = "2026-05-13";
+
+const emptyStockProductForm: StockProductForm = {
+  kind: "Peca",
+  codigo: "",
+  tipo: "",
+  sku: "",
+  dataEntrada: today,
+  nome: "",
+  categoria: "",
+  marca: "Apple",
+  modelo: "iPhone 11",
+  imei: "",
+  imei2: "",
+  serial: "",
+  codigoBarras: "",
+  disponibilidade: "Disponivel para venda",
+  cor: "",
+  gb: "128GB",
+  memoriaRam: "",
+  subcategoria: "",
+  quantidade: "1",
+  quantidadeMinima: "",
+  valorCusto: "",
+  valorVenda: "",
+  diasGarantia: "",
+  fornecedor: "",
+  observacao: "",
+  tags: "",
+  cest: "",
+  ncm: "",
+  origem: "",
+  cst: "",
+  cfopSaidaEstadual: "",
+  cfopSaidaInterestadual: "",
+  cfopEntradaEstadual: "",
+  cfopEntradaInterestadual: "",
+  tributacao: "",
+};
 
 function LojaDeIphonePage() {
   const { session, loading, signOut, user } = useAuth();
@@ -628,6 +706,7 @@ function LojaDeIphonePage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [newPhone, setNewPhone] = useState({ modelo: "iPhone 11", capacidade: "128GB", cor: "" });
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
+  const [stockProduct, setStockProduct] = useState<StockProductForm>(emptyStockProductForm);
   const [newService, setNewService] = useState({
     cliente: "",
     modelo: "iPhone 11",
@@ -659,7 +738,7 @@ function LojaDeIphonePage() {
       0,
     );
     const lowStock = parts.filter((item) => item.quantidade <= item.minimo);
-    const availablePhones = phones.filter((item) => item.status === "DisponÃƒÂ­vel").length;
+    const availablePhones = phones.filter((item) => item.status.startsWith("Dispon")).length;
     const openClients = clients.filter((item) => item.aberto > 0).length;
     const activeServices = services.filter((item) =>
       [
@@ -825,6 +904,78 @@ function LojaDeIphonePage() {
     };
     setParts((items) => [part, ...items]);
     toast.success("PeÃƒÂ§a cadastrada");
+  }
+
+  function saveStockProduct() {
+    const quantity = Math.max(0, Number(stockProduct.quantidade) || 0);
+    const minQuantity = Math.max(0, Number(stockProduct.quantidadeMinima) || 0);
+    const cost = moneyToNumber(stockProduct.valorCusto);
+    const salePrice = moneyToNumber(stockProduct.valorVenda);
+    const warranty = Math.max(0, Number(stockProduct.diasGarantia) || 0);
+    const productName = stockProduct.nome.trim();
+    const selectedType =
+      stockProduct.tipo.trim() ||
+      (stockProduct.kind === "Aparelho"
+        ? "Celular"
+        : stockProduct.kind === "Acessorio"
+          ? "Acessorio"
+          : "Peca");
+
+    if (!selectedType || !productName || salePrice <= 0) {
+      toast.error("Preencha tipo, nome do produto e valor de venda");
+      return;
+    }
+
+    if (stockProduct.kind === "Aparelho") {
+      const phone: Phone = {
+        id: Date.now(),
+        modelo: stockProduct.modelo || productName,
+        linha: (stockProduct.modelo || productName).replace("iPhone ", ""),
+        capacidade: stockProduct.gb || "128GB",
+        cor: stockProduct.cor || "Sem cor",
+        estado: stockProduct.categoria || "Seminovo",
+        bateria: Math.max(0, Number(stockProduct.tags.match(/\d+/)?.[0]) || 100),
+        imei: stockProduct.imei || stockProduct.codigo || `IMEI-${Date.now().toString().slice(-6)}`,
+        serial: stockProduct.serial || stockProduct.sku || `SN-${Date.now().toString().slice(-6)}`,
+        faceId: "Nao sei",
+        trueTone: "Nao sei",
+        telaOriginal: "Nao sei",
+        bateriaOriginal: "Nao sei",
+        aberto: "Nao sei",
+        bloqueio: stockProduct.disponibilidade,
+        acompanha: [stockProduct.subcategoria || "Cadastro estoque"].filter(Boolean),
+        custoCompra: cost,
+        custoManutencao: 0,
+        precoVenda: salePrice,
+        status: "Disponivel" as PhoneStatus,
+        observacoes: stockProduct.observacao || "Cadastrado pelo estoque completo.",
+      };
+      setPhones((items) => [phone, ...items]);
+      toast.success("Aparelho cadastrado no estoque");
+    } else {
+      const part: Part = {
+        id: Date.now(),
+        tipo: selectedType,
+        modelo: stockProduct.modelo,
+        qualidade: stockProduct.categoria || stockProduct.subcategoria || "Premium",
+        sku:
+          stockProduct.sku ||
+          `${selectedType.slice(0, 3).toUpperCase()}-${stockProduct.modelo.replace(/\s/g, "-").toUpperCase()}`,
+        fornecedor: stockProduct.fornecedor || "Fornecedor nao informado",
+        custo: cost,
+        preco: salePrice,
+        precoInstalado: salePrice,
+        quantidade: quantity,
+        minimo: minQuantity,
+        localizacao: stockProduct.codigoBarras || "Sem localizacao",
+        garantia: warranty,
+        status: stockStatus(quantity, minQuantity),
+      };
+      setParts((items) => [part, ...items]);
+      toast.success(stockProduct.kind === "Acessorio" ? "Acessorio cadastrado" : "Peca cadastrada");
+    }
+
+    setStockProduct(emptyStockProductForm);
   }
 
   function addService() {
@@ -1124,33 +1275,41 @@ function LojaDeIphonePage() {
 
             {active === "pecas" && (
               <>
-                <ModuleCard
-                  title="Cadastro rÃƒÂ¡pido de peÃƒÂ§a"
-                  icon={Package}
-                  action={<Button onClick={addPart}>Cadastrar peÃƒÂ§a</Button>}
-                >
-                  <div className="grid gap-3 lg:grid-cols-[1fr_1fr_120px]">
-                    <SelectLike
-                      value={newPart.tipo}
-                      onChange={(value) => setNewPart({ ...newPart, tipo: value })}
-                      options={partTypes}
-                    />
-                    <SelectLike
-                      value={newPart.modelo}
-                      onChange={(value) => setNewPart({ ...newPart, modelo: value })}
-                      options={iphoneModels}
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="Qtd."
-                      value={newPart.quantidade}
-                      onChange={(event) =>
-                        setNewPart({ ...newPart, quantidade: event.target.value })
-                      }
-                    />
-                  </div>
-                </ModuleCard>
+                <StockProductFormCard
+                  form={stockProduct}
+                  onChange={(patch) => setStockProduct((current) => ({ ...current, ...patch }))}
+                  onSave={saveStockProduct}
+                  onReset={() => setStockProduct(emptyStockProductForm)}
+                />
+                <div className="hidden">
+                  <ModuleCard
+                    title="Cadastro rÃƒÂ¡pido de peÃƒÂ§a"
+                    icon={Package}
+                    action={<Button onClick={addPart}>Cadastrar peÃƒÂ§a</Button>}
+                  >
+                    <div className="grid gap-3 lg:grid-cols-[1fr_1fr_120px]">
+                      <SelectLike
+                        value={newPart.tipo}
+                        onChange={(value) => setNewPart({ ...newPart, tipo: value })}
+                        options={partTypes}
+                      />
+                      <SelectLike
+                        value={newPart.modelo}
+                        onChange={(value) => setNewPart({ ...newPart, modelo: value })}
+                        options={iphoneModels}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Qtd."
+                        value={newPart.quantidade}
+                        onChange={(event) =>
+                          setNewPart({ ...newPart, quantidade: event.target.value })
+                        }
+                      />
+                    </div>
+                  </ModuleCard>
+                </div>
                 <GeneratedPartsPreview />
                 <DataCard>
                   <ResponsiveTable
@@ -1817,6 +1976,463 @@ function SettingsView() {
   );
 }
 
+function StockProductFormCard({
+  form,
+  onChange,
+  onSave,
+  onReset,
+}: {
+  form: StockProductForm;
+  onChange: (patch: Partial<StockProductForm>) => void;
+  onSave: () => void;
+  onReset: () => void;
+}) {
+  const cost = moneyToNumber(form.valorCusto);
+  const sale = moneyToNumber(form.valorVenda);
+  const profit = Math.max(sale - cost, 0);
+  const margin = sale > 0 ? (profit / sale) * 100 : 0;
+  const markup = cost > 0 ? (profit / cost) * 100 : 0;
+  const isPhone = form.kind === "Aparelho";
+
+  return (
+    <section className="mb-4 overflow-hidden rounded-[24px] bg-surface shadow-soft">
+      <div className="border-b border-border/70 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <ClipboardList className="h-5 w-5" strokeWidth={1.8} />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold tracking-tight text-foreground">
+                Cadastrar Produto em Estoque
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Base completa para aparelho, acessorio e peca, com custo, margem, fornecedor e dados
+                fiscais.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex overflow-x-auto rounded-2xl bg-surface-muted p-1">
+            {(["Aparelho", "Acessorio", "Peca"] as StockKind[]).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => onChange({ kind })}
+                className={`min-w-[110px] rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                  form.kind === kind
+                    ? "bg-primary text-primary-foreground shadow-soft"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {kind}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto">
+          {[
+            "Dados gerais",
+            "Contas a Pagar",
+            "Forma de Pagamento",
+            "Catalogo",
+            "Custos extras",
+            "Anexos",
+            "Movimentacao de Estoque",
+            "Checklist",
+            "Outras informacoes",
+          ].map((tab, index) => (
+            <button
+              key={tab}
+              type="button"
+              className={`shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold transition ${
+                index === 0
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-surface text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() =>
+                index === 0 ? undefined : toast.success(`${tab}: sera conectado na proxima etapa`)
+              }
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-5 p-4 sm:p-5 xl:grid-cols-2">
+        <div className="grid gap-3">
+          <StockField
+            label="Codigo"
+            value={form.codigo}
+            onChange={(codigo) => onChange({ codigo })}
+          />
+          <StockSelect
+            required
+            label="Tipo"
+            value={form.tipo}
+            onChange={(tipo) => onChange({ tipo })}
+            options={
+              isPhone
+                ? ["Celular"]
+                : form.kind === "Acessorio"
+                  ? ["Capinha", "Pelicula", "Cabo", "Carregador", "Acessorio"]
+                  : partTypes
+            }
+          />
+          <StockField label="SKU" value={form.sku} onChange={(sku) => onChange({ sku })} />
+          <StockField
+            type="date"
+            label="Data de Entrada"
+            value={form.dataEntrada}
+            onChange={(dataEntrada) => onChange({ dataEntrada })}
+          />
+          <StockField
+            required
+            label={isPhone ? "Modelo Aparelho" : "Nome produto"}
+            value={form.nome}
+            placeholder={isPhone ? "Ex: iPhone 13 128GB Azul" : "Ex: Tela iPhone 11 Incell"}
+            onChange={(nome) => onChange({ nome })}
+          />
+          <StockSelect
+            label="Categoria"
+            value={form.categoria}
+            onChange={(categoria) => onChange({ categoria })}
+            options={
+              isPhone
+                ? ["Novo", "Seminovo", "Usado", "Vitrine", "Sucata", "Retorno de assistencia"]
+                : [
+                    "Original Apple",
+                    "Original retirada",
+                    "Premium",
+                    "OLED",
+                    "Incell",
+                    "Nacional",
+                    "Paralela",
+                    "Recondicionada",
+                  ]
+            }
+          />
+          <StockField label="Marca" value={form.marca} onChange={(marca) => onChange({ marca })} />
+          <StockField
+            type="number"
+            label="Quantidade"
+            value={form.quantidade}
+            onChange={(quantidade) => onChange({ quantidade })}
+          />
+          <StockField
+            required
+            label="Valor custo"
+            value={form.valorCusto}
+            placeholder="0,00"
+            onChange={(valorCusto) => onChange({ valorCusto })}
+          />
+          <StockField label="Lucro" value={brl(profit)} readOnly onChange={() => undefined} />
+          <StockField
+            label="Mark-up %"
+            value={`${markup.toFixed(1)}%`}
+            readOnly
+            onChange={() => undefined}
+          />
+          <StockField
+            type="number"
+            label="Dias de Garantia"
+            value={form.diasGarantia}
+            onChange={(diasGarantia) => onChange({ diasGarantia })}
+          />
+          <StockField
+            label="Fornecedor"
+            value={form.fornecedor}
+            placeholder="Buscar fornecedor"
+            onChange={(fornecedor) => onChange({ fornecedor })}
+          />
+          <StockArea
+            label="Observacao"
+            value={form.observacao}
+            onChange={(observacao) => onChange({ observacao })}
+          />
+        </div>
+
+        <div className="grid gap-3">
+          {isPhone ? (
+            <>
+              <StockField label="IMEI" value={form.imei} onChange={(imei) => onChange({ imei })} />
+              <StockField
+                label="IMEI 2"
+                value={form.imei2}
+                onChange={(imei2) => onChange({ imei2 })}
+              />
+              <StockSelect
+                required
+                label="Modelo iPhone"
+                value={form.modelo}
+                onChange={(modelo) => onChange({ modelo })}
+                options={iphoneModels}
+              />
+              <StockField
+                label="Serial number"
+                value={form.serial}
+                onChange={(serial) => onChange({ serial })}
+              />
+              <StockField label="Cor" value={form.cor} onChange={(cor) => onChange({ cor })} />
+              <StockSelect
+                label="GB"
+                value={form.gb}
+                onChange={(gb) => onChange({ gb })}
+                options={["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"]}
+              />
+              <StockField
+                label="Memoria RAM"
+                value={form.memoriaRam}
+                onChange={(memoriaRam) => onChange({ memoriaRam })}
+              />
+              <StockSelect
+                label="Estado do Aparelho"
+                value={form.subcategoria}
+                onChange={(subcategoria) => onChange({ subcategoria })}
+                options={[
+                  "Novo",
+                  "Seminovo",
+                  "Usado",
+                  "Vitrine",
+                  "Sucata",
+                  "Retorno de assistencia",
+                ]}
+              />
+            </>
+          ) : (
+            <>
+              <StockField
+                label="Codigo de Barras"
+                value={form.codigoBarras}
+                onChange={(codigoBarras) => onChange({ codigoBarras })}
+              />
+              <StockField
+                label="Serial number"
+                value={form.serial}
+                onChange={(serial) => onChange({ serial })}
+              />
+              <StockSelect
+                required
+                label="Disponibilidade"
+                value={form.disponibilidade}
+                onChange={(disponibilidade) => onChange({ disponibilidade })}
+                options={["Disponivel para venda", "Reservada", "Defeituosa", "Sem estoque"]}
+              />
+              <StockField label="Cor" value={form.cor} onChange={(cor) => onChange({ cor })} />
+              <StockSelect
+                label="Modelo compativel"
+                value={form.modelo}
+                onChange={(modelo) => onChange({ modelo })}
+                options={iphoneModels}
+              />
+              <StockField
+                label="Subcategoria"
+                value={form.subcategoria}
+                onChange={(subcategoria) => onChange({ subcategoria })}
+              />
+            </>
+          )}
+
+          <StockField
+            type="number"
+            label="Quantidade minima"
+            value={form.quantidadeMinima}
+            onChange={(quantidadeMinima) => onChange({ quantidadeMinima })}
+          />
+          <StockField
+            required
+            label="Valor venda"
+            value={form.valorVenda}
+            placeholder="0,00"
+            onChange={(valorVenda) => onChange({ valorVenda })}
+          />
+          <StockField
+            label="Margem %"
+            value={`${margin.toFixed(1)}%`}
+            readOnly
+            onChange={() => undefined}
+          />
+          <StockArea label="Tags" value={form.tags} onChange={(tags) => onChange({ tags })} />
+        </div>
+      </div>
+
+      <div className="border-t border-border/70 p-4 sm:p-5">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">Dados para Emissao de NF</h3>
+        <div className="grid gap-3 md:grid-cols-2">
+          <StockField label="CEST" value={form.cest} onChange={(cest) => onChange({ cest })} />
+          <StockField label="NCM" value={form.ncm} onChange={(ncm) => onChange({ ncm })} />
+          <StockSelect
+            label="Origem"
+            value={form.origem}
+            onChange={(origem) => onChange({ origem })}
+            options={[
+              "",
+              "0 - Nacional",
+              "1 - Estrangeira importacao direta",
+              "2 - Estrangeira mercado interno",
+            ]}
+          />
+          <StockField label="CST/CSOSN" value={form.cst} onChange={(cst) => onChange({ cst })} />
+          <StockField
+            label="CFOP Estadual (Saida)"
+            value={form.cfopSaidaEstadual}
+            onChange={(cfopSaidaEstadual) => onChange({ cfopSaidaEstadual })}
+          />
+          <StockField
+            label="CFOP Interestadual (Saida)"
+            value={form.cfopSaidaInterestadual}
+            onChange={(cfopSaidaInterestadual) => onChange({ cfopSaidaInterestadual })}
+          />
+          <StockField
+            label="CFOP Estadual (Entrada)"
+            value={form.cfopEntradaEstadual}
+            onChange={(cfopEntradaEstadual) => onChange({ cfopEntradaEstadual })}
+          />
+          <StockField
+            label="CFOP Interestadual (Entrada)"
+            value={form.cfopEntradaInterestadual}
+            onChange={(cfopEntradaInterestadual) => onChange({ cfopEntradaInterestadual })}
+          />
+          <div className="md:col-span-2">
+            <StockField
+              label="Tributacao"
+              value={form.tributacao}
+              placeholder="Buscar regra fiscal"
+              onChange={(tributacao) => onChange({ tributacao })}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 border-t border-border/70 bg-surface-muted/45 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onSave} className="rounded-full">
+            <CheckCircle2 className="h-4 w-4" />
+            Salvar
+          </Button>
+          <Button type="button" variant="outline" onClick={onReset} className="rounded-full">
+            <Trash2 className="h-4 w-4" />
+            Limpar formulario
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => toast.success("Cadastro mantido em aberto")}
+            className="rounded-full"
+          >
+            <ArrowRight className="h-4 w-4 rotate-180" />
+            Voltar
+          </Button>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => toast.success("Configurador de campos preparado")}
+          className="rounded-full"
+        >
+          <Settings className="h-4 w-4" />
+          Configurar campos
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function StockField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  required,
+  readOnly,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+  readOnly?: boolean;
+}) {
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center">
+      <Label className="text-[12px] font-medium text-foreground/80">
+        {required && <span className="text-destructive">* </span>}
+        {label}
+      </Label>
+      <Input
+        type={type}
+        value={value}
+        readOnly={readOnly}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className={`h-10 min-w-0 rounded-xl bg-surface-muted text-sm ${readOnly ? "border-primary/20 bg-primary/5 font-semibold text-foreground" : ""}`}
+      />
+    </div>
+  );
+}
+
+function StockSelect({
+  label,
+  value,
+  onChange,
+  options,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  required?: boolean;
+}) {
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center">
+      <Label className="text-[12px] font-medium text-foreground/80">
+        {required && <span className="text-destructive">* </span>}
+        {label}
+      </Label>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 min-w-0 rounded-xl border border-border bg-surface-muted px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+      >
+        <option value="">Selecionar</option>
+        {options
+          .filter((option) => option !== "")
+          .map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+      </select>
+    </div>
+  );
+}
+
+function StockArea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)]">
+      <Label className="pt-2 text-[12px] font-medium text-foreground/80">{label}</Label>
+      <Textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-h-[88px] rounded-xl bg-surface-muted text-sm"
+      />
+    </div>
+  );
+}
+
 function PageHeader({ active, onPrimary }: { active: TabId; onPrimary: () => void }) {
   const title = tabs.find((item) => item.id === active)?.label ?? "Dashboard";
   const copy: Record<TabId, string> = {
@@ -2231,6 +2847,21 @@ function GeneratedPartsPreview() {
       </div>
     </div>
   );
+}
+
+function moneyToNumber(value: string) {
+  const normalized = value.replace(/\./g, "").replace(",", ".");
+  return Math.max(0, Number(normalized) || 0);
+}
+
+function stockStatus(quantity: number, minQuantity: number) {
+  return (
+    quantity <= 0
+      ? "Sem estoque"
+      : minQuantity > 0 && quantity <= minQuantity
+        ? "Baixo estoque"
+        : "Disponivel"
+  ) as Part["status"];
 }
 
 function matchesFilters(fields: unknown[], query: string, statusFilter: string, status: string) {
