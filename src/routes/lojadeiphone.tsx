@@ -1,4 +1,5 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createServerFn, useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -227,6 +228,24 @@ type Payment = {
   forma: string;
   data: string;
   observacoes: string;
+};
+
+type FiadoAiRequest = {
+  mode: "duvida" | "catalogo";
+  prompt: string;
+  appContext: {
+    phones: number;
+    parts: number;
+    clients: number;
+    sales: number;
+    services: number;
+  };
+};
+
+type FiadoAiResponse = {
+  answer: string;
+  questions: string[];
+  parts: AiCatalogPart[];
 };
 
 type StockKind = "Aparelho" | "Acessório" | "Peça";
@@ -477,6 +496,96 @@ const partQualityOptions = [
   "Paralela",
   "Recondicionada",
 ];
+
+const fiadoAiSystemPrompt = `Voce e a IA oficial do SaaS Fiado V2 para loja de iPhone. Responda como um especialista de produto, claro, direto e util.
+
+Manual interno do app:
+- Rota principal /lojadeiphone e uma V2 para lojas de iPhone, pecas, assistencia tecnica, fiado, emprestimos, pagamentos, cobrancas, estoque e relatorios.
+- Dashboard mostra total vendido, recebido, fiado, lucro, clientes em aberto, estoque baixo, servicos em andamento e aparelhos disponiveis.
+- Aba Celulares cadastra iPhone completo: modelo, capacidade, cor, estado, bateria, IMEI, serial, Face ID, True Tone, tela/bateria original, bloqueio, acessorios, custos, preco e status. O cadastro manual de aparelho e feito um por vez pelo botao + Adicionar iPhone.
+- Aba Pecas cadastra pecas por tipo, modelo compativel, qualidade, fornecedor, custo, preco, estoque, minimo, localizacao e garantia. A IA pode transformar uma lista grande de pecas em itens revisaveis para estoque.
+- Aba Servicos cria ordem de servico para assistencia tecnica.
+- Aba Clientes cadastra B2C venda final e B2B revenda, individualmente ou por lista.
+- Aba Vendas tem modos A vista, Fiado e Emprestimo, com entrada, parcelas e baixa de estoque.
+- Aba Emprestimos registra peca ou celular emprestado, cria parcelas, entra em Cobrancas e permite validar pagamento.
+- Aba Cobrancas mostra hoje/todas, vencidas, WhatsApp, pagar e renegociar.
+- Aba Estoque consolida celulares, pecas e acessorios.
+- Aba Relatorios resume faturamento, margem, itens vendidos, inadimplencia e estoque.
+- Aba IA tira duvidas sobre o app e preenche catalogo de pecas para revisar antes de importar.
+
+Regras:
+- Se o usuario fizer uma pergunta sobre como usar o app, responda a pergunta diretamente, sem pedir mais contexto se a resposta estiver no manual.
+- Se perguntar limite/quantidade, explique o limite pratico da tela atual.
+- Se o modo for catalogo, extraia itens de estoque de listas soltas e pergunte quando faltar modelo, preco, qualidade, quantidade, fornecedor ou localizacao.
+- Nunca invente que uma funcionalidade ja salva no banco se o contexto nao disser isso; diga "na tela atual" quando for comportamento de interface.
+- Responda em JSON puro no formato:
+{
+  "answer": "resposta em portugues",
+  "questions": ["perguntas objetivas se faltar dado"],
+  "parts": [{
+    "tipo": "tipo de peca",
+    "modelo": "modelo de iPhone compativel",
+    "qualidade": "Original Apple | Original retirada | Premium | OLED | Incell | Nacional | Paralela | Recondicionada",
+    "fornecedor": "fornecedor ou vazio",
+    "custo": 0,
+    "preco": 0,
+    "precoInstalado": 0,
+    "quantidade": 1,
+    "minimo": 1,
+    "localizacao": "gaveta/caixa/prateleira ou vazio",
+    "garantia": 30,
+    "observacoes": "detalhes",
+    "precisaRevisao": true
+  }]
+}`;
+
+const askFiadoAIServer = createServerFn({ method: "POST" })
+  .inputValidator((data: FiadoAiRequest) => data)
+  .handler(async ({ data }): Promise<FiadoAiResponse> => {
+    const localParts =
+      data.mode === "catalogo" ? sanitizeAiParts(parseCatalogText(data.prompt)) : [];
+    const localAnswer = localFiadoAnswer(data.mode, localParts.length, data.prompt);
+
+    try {
+      const response = await fetch("https://text.pollinations.ai/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "openai",
+          messages: [
+            { role: "system", content: fiadoAiSystemPrompt },
+            {
+              role: "user",
+              content: JSON.stringify({
+                mode: data.mode,
+                prompt: data.prompt,
+                appContext: data.appContext,
+              }),
+            },
+          ],
+          temperature: 0.15,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`AI status ${response.status}`);
+      const payload = await response.json();
+      const content = payload?.choices?.[0]?.message?.content ?? "";
+      const parsed = parseAiJson(content);
+      const parts = sanitizeAiParts(parsed.parts?.length ? parsed.parts : localParts);
+
+      return {
+        answer: parsed.answer || localAnswer,
+        questions: parsed.questions?.length ? parsed.questions : buildAiQuestions(parts),
+        parts,
+      };
+    } catch {
+      return {
+        answer: localAnswer,
+        questions: buildAiQuestions(localParts),
+        parts: localParts,
+      };
+    }
+  });
 
 const serviceTypes = [
   "Troca de bateria",
@@ -825,6 +934,7 @@ const emptyStockProductForm: StockProductForm = {
 
 function LojaDeIphonePage() {
   const { session, loading, signOut, user } = useAuth();
+  const askFiadoAI = useServerFn(askFiadoAIServer);
   const [active, setActive] = useState<TabId>("dashboard");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
@@ -1540,63 +1650,31 @@ function LojaDeIphonePage() {
     setAiAnswer("");
     setAiDraftParts([]);
 
-    const systemPrompt = `Voce e a IA interna do SaaS Fiado para loja de iPhones. Responda em JSON puro.
-Formato obrigatorio:
-{
-  "answer": "resposta curta em portugues",
-  "questions": ["perguntas objetivas se faltar dado"],
-  "parts": [{
-    "tipo": "tipo de peca",
-    "modelo": "modelo de iPhone compativel",
-    "qualidade": "Original Apple | Original retirada | Premium | OLED | Incell | Nacional | Paralela | Recondicionada",
-    "fornecedor": "fornecedor ou vazio",
-    "custo": 0,
-    "preco": 0,
-    "precoInstalado": 0,
-    "quantidade": 1,
-    "minimo": 1,
-    "localizacao": "gaveta/caixa/prateleira ou vazio",
-    "garantia": 30,
-    "observacoes": "detalhes",
-    "precisaRevisao": true
-  }]
-}
-Se o modo for catalogo, extraia pecas de listas soltas e marque precisaRevisao quando faltar preco, modelo, qualidade ou quantidade. Se for duvida, responda e deixe parts vazio.`;
-
     try {
-      const response = await fetch("https://text.pollinations.ai/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "openai-fast",
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: `Modo: ${aiMode}. Contexto do estoque atual: ${parts.length} pecas, ${phones.length} celulares. Pedido: ${aiPrompt}`,
-            },
-          ],
-          temperature: 0.2,
-        }),
+      const result = await askFiadoAI({
+        data: {
+          mode: aiMode,
+          prompt: aiPrompt,
+          appContext: {
+            phones: phones.length,
+            parts: parts.length,
+            clients: clients.length,
+            sales: sales.length,
+            services: services.length,
+          },
+        },
       });
-
-      if (!response.ok) throw new Error(`AI status ${response.status}`);
-      const data = await response.json();
-      const content = data?.choices?.[0]?.message?.content ?? "";
-      const parsed = parseAiJson(content);
-      const fallbackParts = aiMode === "catalogo" ? parseCatalogText(aiPrompt) : [];
-      const partsFromAI = sanitizeAiParts(parsed.parts?.length ? parsed.parts : fallbackParts);
-      setAiAnswer(parsed.answer || localAiAnswer(aiMode, partsFromAI.length));
-      setAiQuestions(parsed.questions ?? buildAiQuestions(partsFromAI));
-      setAiDraftParts(partsFromAI);
+      setAiAnswer(result.answer);
+      setAiQuestions(result.questions);
+      setAiDraftParts(result.parts);
       toast.success("IA processou o pedido");
     } catch {
       const fallbackParts =
         aiMode === "catalogo" ? sanitizeAiParts(parseCatalogText(aiPrompt)) : [];
-      setAiAnswer(localAiAnswer(aiMode, fallbackParts.length));
+      setAiAnswer(localFiadoAnswer(aiMode, fallbackParts.length, aiPrompt));
       setAiQuestions(buildAiQuestions(fallbackParts));
       setAiDraftParts(fallbackParts);
-      toast.success("IA local preparou uma revisao sem depender do seu PC");
+      toast.success("IA respondeu com base no manual do Fiado");
     } finally {
       setAiLoading(false);
     }
@@ -4491,9 +4569,34 @@ function buildAiQuestions(parts: AiCatalogPart[]) {
   return [...questions];
 }
 
-function localAiAnswer(mode: "duvida" | "catalogo", count: number) {
+function localFiadoAnswer(mode: "duvida" | "catalogo", count: number, prompt: string) {
+  const normalized = normalizeSearch(prompt);
   if (mode === "duvida") {
-    return "Posso ajudar com estoque, vendas fiadas, cobrancas, clientes B2B/B2C, lucro e cadastro. Escreva sua pergunta com o contexto da loja.";
+    if (
+      normalized.includes("quantos") &&
+      (normalized.includes("aparelhos") ||
+        normalized.includes("celulares") ||
+        normalized.includes("iphone"))
+    ) {
+      return "Na tela atual, o cadastro completo de iPhone e feito um aparelho por vez pelo botao + Adicionar iPhone, porque cada unidade precisa de IMEI, serial, cor, bateria, custo e status proprios. Para pecas, voce pode colar uma lista grande na aba IA e importar varios itens para o estoque depois de revisar.";
+    }
+
+    if (normalized.includes("cadastrar") && normalized.includes("peca")) {
+      return "Para cadastrar pecas em lote, va na aba IA, selecione Preencher catalogo, cole a lista com tipo, modelo, quantidade, custo e preco, revise o resultado e clique em Adicionar ao estoque. Se faltar dado, a IA vai listar as perguntas antes de importar.";
+    }
+
+    if (normalized.includes("emprestimo")) {
+      return "Na aba Emprestimos voce informa cliente, peca ou celular emprestado, valor, entrada, parcelas, dia de cobranca e primeira parcela. O sistema cria as cobrancas e depois voce valida cada pagamento pelo botao Validar pagamento.";
+    }
+
+    if (
+      normalized.includes("cliente") &&
+      (normalized.includes("b2b") || normalized.includes("b2c"))
+    ) {
+      return "Na aba Clientes voce pode cadastrar B2C para venda final e B2B para revenda. Tambem da para importar uma lista no formato nome; whatsapp; cpf/cnpj; observacao.";
+    }
+
+    return "Posso responder sobre como usar o Fiado: cadastro de iPhones, pecas, servicos, clientes B2B/B2C, vendas a vista, fiado, emprestimos, cobrancas, pagamentos, estoque, relatorios e IA de catalogo. Pergunte do jeito que voce falaria no balcão.";
   }
   return count
     ? `Preparei ${count} itens para revisao antes de adicionar ao estoque.`
