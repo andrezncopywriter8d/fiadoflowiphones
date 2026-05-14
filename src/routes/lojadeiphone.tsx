@@ -366,7 +366,14 @@ type ImeiCheckResult = {
   notes: string[];
 };
 
+type LojaBusinessState = {
+  clients: Client[];
+  sales: Sale[];
+  payments: Payment[];
+};
+
 const lojaInventoryLocalKey = (userId: string) => `fiado:lojadeiphone:inventory:${userId}`;
+const lojaBusinessLocalKey = (userId: string) => `fiado:lojadeiphone:business:${userId}`;
 
 function readLocalLojaInventoryProducts(userId: string): InventoryProductRow[] {
   if (typeof window === "undefined") return [];
@@ -383,6 +390,22 @@ function saveLocalLojaInventoryProduct(userId: string, row: InventoryProductRow)
   if (typeof window === "undefined") return;
   const rows = readLocalLojaInventoryProducts(userId).filter((item) => item.id !== row.id);
   window.localStorage.setItem(lojaInventoryLocalKey(userId), JSON.stringify([row, ...rows]));
+}
+
+function readLocalLojaBusiness(userId: string): LojaBusinessState | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(lojaBusinessLocalKey(userId));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as LojaBusinessState;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalLojaBusiness(userId: string, state: LojaBusinessState) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(lojaBusinessLocalKey(userId), JSON.stringify(state));
 }
 
 function hydrateInventoryRows(
@@ -999,7 +1022,7 @@ const seedPayments: Payment[] = [
   },
 ];
 
-const today = "2026-05-13";
+const today = new Date().toISOString().slice(0, 10);
 
 const emptyStockProductForm: StockProductForm = {
   kind: "Peça",
@@ -1054,6 +1077,7 @@ function LojaDeIphonePage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [businessLoaded, setBusinessLoaded] = useState(false);
   const [aiMode, setAiMode] = useState<"duvida" | "catalogo">("catalogo");
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiAnswer, setAiAnswer] = useState("");
@@ -1114,7 +1138,7 @@ function LojaDeIphonePage() {
     valor: "",
     entrada: "",
     parcelas: "1",
-    modalidade: "fiado" as NonNullable<Sale["modalidade"]>,
+    modalidade: "avista" as NonNullable<Sale["modalidade"]>,
     jurosMensal: "0",
     diaCobranca: "20",
     primeiraParcela: "2026-06-20",
@@ -1158,6 +1182,12 @@ function LojaDeIphonePage() {
   useEffect(() => {
     if (!userId) return;
 
+    const business = readLocalLojaBusiness(userId);
+    setClients(business?.clients ?? []);
+    setSales(business?.sales ?? []);
+    setPayments(business?.payments ?? []);
+    setBusinessLoaded(true);
+
     let activeRequest = true;
     setInventoryLoading(true);
 
@@ -1189,6 +1219,11 @@ function LojaDeIphonePage() {
       activeRequest = false;
     };
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !businessLoaded) return;
+    saveLocalLojaBusiness(userId, { clients, sales, payments });
+  }, [businessLoaded, clients, payments, sales, userId]);
 
   const totals = useMemo(() => {
     const totalVendido = sales.reduce(
@@ -1367,6 +1402,14 @@ function LojaDeIphonePage() {
   };
   const saleNetTotal = Math.max(saleTotals.gross - saleTotals.discount, 0);
   const salePendingTotal = Math.max(saleNetTotal - saleTotals.paid, 0);
+  const salePaymentNeedsInstallments = ["Cartao de credito", "Boleto", "Outro"].includes(
+    salePaymentDraft.forma,
+  );
+  const salePaymentGrid = salePaymentNeedsInstallments
+    ? "lg:grid-cols-[190px_150px_120px_1fr_auto]"
+    : "lg:grid-cols-[190px_150px_1fr_auto]";
+  const showSaleChargeSchedule =
+    (newSale.modalidade === "fiado" || newSale.modalidade === "emprestimo") && salePendingTotal > 0;
   const filteredPayments = payments.filter((item) =>
     searchIn([item.cliente, item.venda, item.forma, item.data], query),
   );
@@ -2097,7 +2140,7 @@ function LojaDeIphonePage() {
       valor: "",
       entrada: "",
       parcelas: "1",
-      modalidade: "fiado" as NonNullable<Sale["modalidade"]>,
+      modalidade: "avista" as NonNullable<Sale["modalidade"]>,
       jurosMensal: "0",
       diaCobranca: "20",
       primeiraParcela: nextDueDate(today, 20),
@@ -2146,7 +2189,9 @@ function LojaDeIphonePage() {
 
   function addSalePayment() {
     const value = moneyToNumber(salePaymentDraft.valor);
-    const installments = Math.max(1, Number(salePaymentDraft.parcelas) || 1);
+    const installments = salePaymentNeedsInstallments
+      ? Math.max(1, Number(salePaymentDraft.parcelas) || 1)
+      : 1;
 
     if (value <= 0) {
       toast.error("Informe o valor pago ou a entrada");
@@ -2174,6 +2219,7 @@ function LojaDeIphonePage() {
   async function persistSaleStockChanges(modality: NonNullable<Sale["modalidade"]>) {
     const phoneUpdates: Phone[] = [];
     const partUpdates: Part[] = [];
+    const serviceUpdates: ServiceOrder[] = [];
 
     saleItems.forEach((saleItem) => {
       if (saleItem.kind === "phone") {
@@ -2197,6 +2243,20 @@ function LojaDeIphonePage() {
           status: stockStatus(nextQuantity, part.minimo),
         });
       }
+
+      if (saleItem.kind === "service") {
+        const service = services.find((item) => item.id === saleItem.sourceId);
+        if (!service) return;
+        serviceUpdates.push({
+          ...service,
+          status: modality === "avista" ? "Entregue" : "Pronto",
+          formaPagamento:
+            modality === "avista"
+              ? salePayments.map((payment) => payment.forma).join(" + ") || service.formaPagamento
+              : "Fiado",
+          entrada: saleTotals.paid,
+        });
+      }
     });
 
     setPhones((items) =>
@@ -2205,10 +2265,16 @@ function LojaDeIphonePage() {
     setParts((items) =>
       items.map((part) => partUpdates.find((updated) => updated.id === part.id) ?? part),
     );
+    setServices((items) =>
+      items.map(
+        (service) => serviceUpdates.find((updated) => updated.id === service.id) ?? service,
+      ),
+    );
 
     const updates = [
       ...phoneUpdates.map((phone) => updateLojaInventoryProduct(phone, "phone", user?.id)),
       ...partUpdates.map((part) => updateLojaInventoryProduct(part, "part", user?.id)),
+      ...serviceUpdates.map((service) => updateLojaInventoryProduct(service, "service", user?.id)),
     ];
 
     const results = await Promise.all(updates);
@@ -2588,6 +2654,13 @@ function LojaDeIphonePage() {
       },
       ...items,
     ]);
+    setClients((items) =>
+      items.map((client) =>
+        client.nome === sale.cliente
+          ? { ...client, aberto: Math.max(client.aberto - nextInstallment.valor, 0) }
+          : client,
+      ),
+    );
     toast.success("Pagamento do emprestimo validado");
   }
 
@@ -2686,6 +2759,16 @@ function LojaDeIphonePage() {
   }
 
   function markChargePaid(id: number, installmentId?: number | null) {
+    const sale = sales.find((item) => item.id === id);
+    if (!sale) {
+      toast.error("Cobrança nao encontrada");
+      return;
+    }
+    const paidAmount =
+      installmentId && sale.parcelasAgenda?.length
+        ? (sale.parcelasAgenda.find((installment) => installment.id === installmentId)?.valor ?? 0)
+        : Math.max(sale.unitario * sale.quantidade - sale.desconto - sale.entrada, 0);
+
     setSales((items) =>
       items.map((item) => {
         if (item.id !== id) return item;
@@ -2711,6 +2794,27 @@ function LojaDeIphonePage() {
         };
       }),
     );
+    if (paidAmount > 0) {
+      setPayments((items) => [
+        {
+          id: Date.now(),
+          cliente: sale.cliente,
+          venda: installmentId ? `${sale.item} - parcela` : sale.item,
+          valor: paidAmount,
+          forma: "Pagamento confirmado",
+          data: today,
+          observacoes: "Registrado pela aba de cobrancas.",
+        },
+        ...items,
+      ]);
+      setClients((items) =>
+        items.map((client) =>
+          client.nome === sale.cliente
+            ? { ...client, aberto: Math.max(client.aberto - paidAmount, 0) }
+            : client,
+        ),
+      );
+    }
     toast.success(installmentId ? "Parcela marcada como paga" : "Cobrança marcada como paga");
   }
 
@@ -3476,12 +3580,20 @@ function LojaDeIphonePage() {
                             <h3 className="mb-3 text-sm font-semibold text-foreground">
                               Dados do pagamento
                             </h3>
-                            <div className="grid gap-3 lg:grid-cols-[190px_150px_120px_1fr_auto]">
+                            <div className={`grid gap-3 ${salePaymentGrid}`}>
                               <FieldBlock label="Forma">
                                 <SelectLike
                                   value={salePaymentDraft.forma}
                                   onChange={(value) =>
-                                    setSalePaymentDraft({ ...salePaymentDraft, forma: value })
+                                    setSalePaymentDraft({
+                                      ...salePaymentDraft,
+                                      forma: value,
+                                      parcelas: ["Cartao de credito", "Boleto", "Outro"].includes(
+                                        value,
+                                      )
+                                        ? salePaymentDraft.parcelas
+                                        : "1",
+                                    })
                                   }
                                   options={[
                                     "Pix",
@@ -3489,7 +3601,6 @@ function LojaDeIphonePage() {
                                     "Cartao de credito",
                                     "Cartao de debito",
                                     "Boleto",
-                                    "Fiado",
                                     "Outro",
                                   ]}
                                 />
@@ -3507,18 +3618,20 @@ function LojaDeIphonePage() {
                                   }
                                 />
                               </FieldBlock>
-                              <FieldBlock label="Parcelas">
-                                <Input
-                                  value={salePaymentDraft.parcelas}
-                                  inputMode="numeric"
-                                  onChange={(event) =>
-                                    setSalePaymentDraft({
-                                      ...salePaymentDraft,
-                                      parcelas: event.target.value,
-                                    })
-                                  }
-                                />
-                              </FieldBlock>
+                              {salePaymentNeedsInstallments && (
+                                <FieldBlock label="Parcelas">
+                                  <Input
+                                    value={salePaymentDraft.parcelas}
+                                    inputMode="numeric"
+                                    onChange={(event) =>
+                                      setSalePaymentDraft({
+                                        ...salePaymentDraft,
+                                        parcelas: event.target.value,
+                                      })
+                                    }
+                                  />
+                                </FieldBlock>
+                              )}
                               <FieldBlock label="Observacao">
                                 <Input
                                   placeholder="Comprovante, combinado, maquina..."
@@ -3550,13 +3663,13 @@ function LojaDeIphonePage() {
                                     }
                                     className="rounded-full bg-surface px-3 py-2 text-xs font-semibold text-foreground shadow-soft"
                                   >
-                                    {payment.forma}: {brl(payment.valor)} x{payment.parcelas}
+                                    {payment.forma}: {brl(payment.valor)}
+                                    {payment.parcelas > 1 ? ` x${payment.parcelas}` : ""}
                                   </button>
                                 ))}
                               </div>
                             )}
-                            {(newSale.modalidade === "fiado" ||
-                              newSale.modalidade === "emprestimo") && (
+                            {showSaleChargeSchedule && (
                               <div className="mt-4 grid gap-3 rounded-[18px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-3">
                                 <FieldBlock label="Parcelas pendentes">
                                   <Input
