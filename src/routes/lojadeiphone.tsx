@@ -190,6 +190,34 @@ type Sale = {
   parcelasAgenda?: LoanInstallment[];
 };
 
+type SaleStockKind = "phone" | "part" | "service";
+
+type SaleStockOption = {
+  key: string;
+  kind: SaleStockKind;
+  sourceId: number;
+  productId?: string;
+  title: string;
+  subtitle: string;
+  label: string;
+  available: number;
+  cost: number;
+  price: number;
+};
+
+type SaleFormItem = SaleStockOption & {
+  quantity: number;
+  discount: number;
+};
+
+type SalePaymentEntry = {
+  id: number;
+  forma: string;
+  valor: number;
+  parcelas: number;
+  observacao: string;
+};
+
 type LoanForm = {
   cliente: string;
   item: string;
@@ -1091,6 +1119,25 @@ function LojaDeIphonePage() {
     diaCobranca: "20",
     primeiraParcela: "2026-06-20",
   });
+  const [saleMeta, setSaleMeta] = useState({
+    vendedor: "Andre",
+    data: today,
+    entrega: "Retirada",
+    observacoes: "",
+  });
+  const [saleItemDraft, setSaleItemDraft] = useState({
+    productKey: "",
+    quantidade: "1",
+    desconto: "",
+  });
+  const [saleItems, setSaleItems] = useState<SaleFormItem[]>([]);
+  const [salePaymentDraft, setSalePaymentDraft] = useState({
+    forma: "Pix",
+    valor: "",
+    parcelas: "1",
+    observacao: "",
+  });
+  const [salePayments, setSalePayments] = useState<SalePaymentEntry[]>([]);
   const [newLoan, setNewLoan] = useState<LoanForm>({
     cliente: "",
     item: "",
@@ -1259,6 +1306,67 @@ function LojaDeIphonePage() {
       .filter((phone) => phone.status !== "Vendido")
       .map((phone) => `${phone.modelo} ${phone.capacidade} ${phone.cor}`),
   ];
+  const saleStockOptions: SaleStockOption[] = [
+    ...phones
+      .filter((phone) => phone.status.startsWith("Dispon"))
+      .map((phone) => ({
+        key: `phone:${phone.id}`,
+        kind: "phone" as const,
+        sourceId: phone.id,
+        productId: phone.productId,
+        title: `${phone.modelo} ${phone.capacidade} ${phone.cor}`.trim(),
+        subtitle: `IMEI: ${phone.imei || "sem IMEI"} - Estoque: 1 - ${brl(phone.precoVenda)}`,
+        label: `${phone.modelo} - ${phone.capacidade} - IMEI: ${phone.imei || "sem IMEI"} - Estoque: 1 - ${brl(phone.precoVenda)}`,
+        available: 1,
+        cost: phone.custoCompra + phone.custoManutencao,
+        price: phone.precoVenda,
+      })),
+    ...parts
+      .filter((part) => part.quantidade > 0 && part.status !== "Defeituosa")
+      .map((part) => ({
+        key: `part:${part.id}`,
+        kind: "part" as const,
+        sourceId: part.id,
+        productId: part.productId,
+        title: `${part.tipo} ${part.modelo}`.trim(),
+        subtitle: `${part.qualidade} - SKU: ${part.sku || "sem SKU"} - Estoque: ${part.quantidade} - ${brl(part.preco)}`,
+        label: `${part.tipo} ${part.modelo} - ${part.qualidade} - Estoque: ${part.quantidade} - ${brl(part.preco)}`,
+        available: part.quantidade,
+        cost: part.custo,
+        price: part.preco,
+      })),
+    ...services
+      .filter((service) => service.status !== "Cancelado")
+      .map((service) => {
+        const price = service.custoPeca + service.maoObra;
+        return {
+          key: `service:${service.id}`,
+          kind: "service" as const,
+          sourceId: service.id,
+          productId: service.productId,
+          title: `${service.servico} - ${service.modelo}`,
+          subtitle: `${service.cliente} - ${service.status} - ${brl(price)}`,
+          label: `${service.servico} - ${service.modelo} - ${service.cliente} - ${brl(price)}`,
+          available: 1,
+          cost: service.custoPeca,
+          price,
+        };
+      }),
+  ];
+  const selectedSaleStockOption = saleStockOptions.find(
+    (option) => option.key === saleItemDraft.productKey,
+  );
+  const saleTotals = {
+    gross: saleItems.reduce((acc, item) => acc + item.price * item.quantity, 0),
+    discount: saleItems.reduce((acc, item) => acc + item.discount, 0),
+    paid: salePayments.reduce((acc, item) => acc + item.valor, 0),
+    profit: saleItems.reduce(
+      (acc, item) => acc + (item.price * item.quantity - item.discount - item.cost * item.quantity),
+      0,
+    ),
+  };
+  const saleNetTotal = Math.max(saleTotals.gross - saleTotals.discount, 0);
+  const salePendingTotal = Math.max(saleNetTotal - saleTotals.paid, 0);
   const filteredPayments = payments.filter((item) =>
     searchIn([item.cliente, item.venda, item.forma, item.data], query),
   );
@@ -1423,6 +1531,7 @@ function LojaDeIphonePage() {
     }
 
     if (active === "vendas") {
+      resetSaleForm();
       setFormModal("sale");
       toast.success("Venda pronta para preencher");
       return;
@@ -1980,6 +2089,271 @@ function LojaDeIphonePage() {
     toast.success(`${imported.length} itens adicionados ao estoque`);
   }
 
+  function resetSaleForm() {
+    setNewSale({
+      cliente: "",
+      tipo: "Peça" as Sale["tipo"],
+      item: "",
+      valor: "",
+      entrada: "",
+      parcelas: "1",
+      modalidade: "fiado" as NonNullable<Sale["modalidade"]>,
+      jurosMensal: "0",
+      diaCobranca: "20",
+      primeiraParcela: nextDueDate(today, 20),
+    });
+    setSaleMeta({ vendedor: firstName, data: today, entrega: "Retirada", observacoes: "" });
+    setSaleItemDraft({ productKey: "", quantidade: "1", desconto: "" });
+    setSaleItems([]);
+    setSalePaymentDraft({ forma: "Pix", valor: "", parcelas: "1", observacao: "" });
+    setSalePayments([]);
+  }
+
+  function addSelectedSaleItem() {
+    if (!selectedSaleStockOption) {
+      toast.error("Selecione um produto disponivel no estoque");
+      return;
+    }
+
+    const quantity = Math.max(1, Number(saleItemDraft.quantidade) || 1);
+    const discount = moneyToNumber(saleItemDraft.desconto);
+    const existingQuantity =
+      saleItems.find((item) => item.key === selectedSaleStockOption.key)?.quantity ?? 0;
+
+    if (quantity + existingQuantity > selectedSaleStockOption.available) {
+      toast.error("Quantidade maior que o estoque disponivel");
+      return;
+    }
+
+    setSaleItems((items) => {
+      const existing = items.find((item) => item.key === selectedSaleStockOption.key);
+      if (existing) {
+        return items.map((item) =>
+          item.key === selectedSaleStockOption.key
+            ? {
+                ...item,
+                quantity: item.quantity + quantity,
+                discount: item.discount + discount,
+              }
+            : item,
+        );
+      }
+      return [...items, { ...selectedSaleStockOption, quantity, discount }];
+    });
+    setSaleItemDraft({ productKey: "", quantidade: "1", desconto: "" });
+    toast.success("Produto adicionado na venda");
+  }
+
+  function addSalePayment() {
+    const value = moneyToNumber(salePaymentDraft.valor);
+    const installments = Math.max(1, Number(salePaymentDraft.parcelas) || 1);
+
+    if (value <= 0) {
+      toast.error("Informe o valor pago ou a entrada");
+      return;
+    }
+    if (saleNetTotal > 0 && value > salePendingTotal) {
+      toast.error("O pagamento ficou maior que o saldo da venda");
+      return;
+    }
+
+    setSalePayments((items) => [
+      ...items,
+      {
+        id: Date.now(),
+        forma: salePaymentDraft.forma,
+        valor: value,
+        parcelas: installments,
+        observacao: salePaymentDraft.observacao.trim(),
+      },
+    ]);
+    setSalePaymentDraft({ forma: "Pix", valor: "", parcelas: "1", observacao: "" });
+    toast.success("Pagamento adicionado");
+  }
+
+  async function persistSaleStockChanges(modality: NonNullable<Sale["modalidade"]>) {
+    const phoneUpdates: Phone[] = [];
+    const partUpdates: Part[] = [];
+
+    saleItems.forEach((saleItem) => {
+      if (saleItem.kind === "phone") {
+        const phone = phones.find((item) => item.id === saleItem.sourceId);
+        if (!phone) return;
+        phoneUpdates.push({
+          ...phone,
+          status: modality === "avista" ? "Vendido" : "Fiado",
+          observacoes:
+            `${phone.observacoes || ""}\nMovimentado na venda para ${newSale.cliente || "Cliente balcão"} em ${saleMeta.data}.`.trim(),
+        });
+      }
+
+      if (saleItem.kind === "part") {
+        const part = parts.find((item) => item.id === saleItem.sourceId);
+        if (!part) return;
+        const nextQuantity = Math.max(part.quantidade - saleItem.quantity, 0);
+        partUpdates.push({
+          ...part,
+          quantidade: nextQuantity,
+          status: stockStatus(nextQuantity, part.minimo),
+        });
+      }
+    });
+
+    setPhones((items) =>
+      items.map((phone) => phoneUpdates.find((updated) => updated.id === phone.id) ?? phone),
+    );
+    setParts((items) =>
+      items.map((part) => partUpdates.find((updated) => updated.id === part.id) ?? part),
+    );
+
+    const updates = [
+      ...phoneUpdates.map((phone) => updateLojaInventoryProduct(phone, "phone", user?.id)),
+      ...partUpdates.map((part) => updateLojaInventoryProduct(part, "part", user?.id)),
+    ];
+
+    const results = await Promise.all(updates);
+    if (results.some((item) => !item)) {
+      toast.warning("Venda salva. Alguns itens ficaram atualizados localmente nesta sessao.");
+    }
+  }
+
+  async function finalizeStoreSale() {
+    const modality = newSale.modalidade;
+    const requiresClient = modality === "fiado" || modality === "emprestimo";
+    const clientName = newSale.cliente.trim();
+
+    if (requiresClient && !clientName) {
+      toast.error("Selecione um cliente para fiado ou emprestimo");
+      return;
+    }
+    if (!saleItems.length) {
+      toast.error("Adicione pelo menos um produto do estoque");
+      return;
+    }
+    const invalidStock = saleItems.find(
+      (item) => item.available <= 0 || item.quantity > item.available,
+    );
+    if (invalidStock) {
+      toast.error(`Sem estoque suficiente para ${invalidStock.title}`);
+      return;
+    }
+    if (saleTotals.paid > saleNetTotal) {
+      toast.error("O valor pago ficou maior que o total da venda");
+      return;
+    }
+    if (modality === "avista" && salePendingTotal > 0) {
+      toast.error("Venda normal precisa estar totalmente paga");
+      return;
+    }
+    if (
+      (modality === "fiado" || modality === "emprestimo") &&
+      salePendingTotal > 0 &&
+      !newSale.primeiraParcela
+    ) {
+      toast.error("Informe a primeira cobrança");
+      return;
+    }
+
+    const itemSummary = saleItems.map((item) => `${item.quantity}x ${item.title}`).join(" + ");
+    const totalQuantity = saleItems.reduce((acc, item) => acc + item.quantity, 0);
+    const installments = Math.max(1, Number(newSale.parcelas) || 1);
+    const chargeDay = Math.min(31, Math.max(1, Number(newSale.diaCobranca) || 20));
+    const schedule =
+      salePendingTotal > 0 && (modality === "fiado" || modality === "emprestimo")
+        ? buildLoanSchedule({
+            firstDueDate: newSale.primeiraParcela || nextDueDate(saleMeta.data, chargeDay),
+            chargeDay,
+            count: installments,
+            total: salePendingTotal,
+          })
+        : undefined;
+    const status: SaleStatus =
+      modality === "emprestimo"
+        ? "Em aberto"
+        : salePendingTotal <= 0
+          ? "Pago"
+          : saleTotals.paid > 0
+            ? "Parcial"
+            : "Em aberto";
+
+    const sale: Sale = {
+      id: Date.now(),
+      cliente: clientName || "Cliente balcão",
+      tipo:
+        saleItems.length > 1
+          ? "Combo"
+          : saleItems[0].kind === "phone"
+            ? "Celular"
+            : saleItems[0].kind === "service"
+              ? "Serviço"
+              : "Peça",
+      item: itemSummary,
+      quantidade: totalQuantity,
+      unitario: totalQuantity > 0 ? saleNetTotal / totalQuantity : saleNetTotal,
+      desconto: 0,
+      pagamento:
+        modality === "emprestimo"
+          ? "Emprestimo"
+          : salePayments.map((payment) => payment.forma).join(" + ") || "Fiado",
+      entrada: saleTotals.paid,
+      parcelas: installments,
+      vencimento: schedule?.[0]?.vencimento ?? saleMeta.data,
+      status,
+      lucro: saleTotals.profit,
+      modalidade: modality,
+      diaCobranca: chargeDay,
+      totalProgramado: salePendingTotal,
+      parcelasAgenda: schedule,
+    };
+
+    await persistSaleStockChanges(modality);
+    setSales((items) => [sale, ...items]);
+    if (salePayments.length) {
+      setPayments((items) => [
+        ...salePayments.map((payment) => ({
+          id: Date.now() + payment.id,
+          cliente: sale.cliente,
+          venda: sale.item,
+          valor: payment.valor,
+          forma: payment.forma,
+          data: saleMeta.data,
+          observacoes:
+            payment.observacao ||
+            `${payment.parcelas}x - ${saleMeta.entrega} - vendedor ${saleMeta.vendedor}`,
+        })),
+        ...items,
+      ]);
+    }
+    setClients((items) =>
+      items.map((client) =>
+        client.nome === sale.cliente
+          ? {
+              ...client,
+              compras: client.compras + 1,
+              totalComprado: client.totalComprado + saleNetTotal,
+              aberto: client.aberto + salePendingTotal,
+              aparelhos: [
+                ...client.aparelhos,
+                ...saleItems.filter((item) => item.kind === "phone").map((item) => item.title),
+              ],
+              pecas: [
+                ...client.pecas,
+                ...saleItems.filter((item) => item.kind === "part").map((item) => item.title),
+              ],
+              servicos: [
+                ...client.servicos,
+                ...saleItems.filter((item) => item.kind === "service").map((item) => item.title),
+              ],
+            }
+          : client,
+      ),
+    );
+
+    setFormModal(null);
+    resetSaleForm();
+    toast.success("Venda da loja iPhone finalizada e estoque atualizado");
+  }
+
   function addSale() {
     const value = Number(newSale.valor) || 0;
     const entry = Number(newSale.entrada) || 0;
@@ -2255,7 +2629,7 @@ function LojaDeIphonePage() {
 
   async function savePhoneEdit() {
     if (!phoneDraft) return;
-    const updated = await updateLojaInventoryProduct(phoneDraft, "phone");
+    const updated = await updateLojaInventoryProduct(phoneDraft, "phone", user?.id);
     if (!updated) return;
     setPhones((items) =>
       items.map((item) => (item.id === phoneDraft.id ? (updated as Phone) : item)),
@@ -2281,7 +2655,7 @@ function LojaDeIphonePage() {
       observacoes:
         `${selectedPhone.observacoes || ""}\nVendido para ${phoneSaleDraft.cliente.trim()} em ${today}.`.trim(),
     };
-    const updated = await updateLojaInventoryProduct(soldPhone, "phone");
+    const updated = await updateLojaInventoryProduct(soldPhone, "phone", user?.id);
     if (!updated) return;
 
     setPhones((items) =>
@@ -2927,137 +3301,455 @@ function LojaDeIphonePage() {
                         id="iphone-sale-form"
                         title="Nova venda"
                         icon={BadgeDollarSign}
-                        action={<Button onClick={addSale}>Registrar venda</Button>}
+                        action={<Button onClick={finalizeStoreSale}>Finalizar venda</Button>}
                       >
-                        <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
-                          {[
-                            { id: "avista", label: "A vista" },
-                            { id: "fiado", label: "Fiado" },
-                            { id: "emprestimo", label: "Emprestimo" },
-                          ].map((option) => (
-                            <button
-                              key={option.id}
-                              type="button"
-                              onClick={() =>
-                                setNewSale({
-                                  ...newSale,
-                                  modalidade: option.id as NonNullable<Sale["modalidade"]>,
-                                  parcelas: option.id === "avista" ? "1" : newSale.parcelas,
-                                })
-                              }
-                              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
-                                newSale.modalidade === option.id
-                                  ? "bg-primary text-primary-foreground shadow-soft"
-                                  : "bg-surface text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="grid gap-3 lg:grid-cols-[1fr_150px_1fr_130px_130px_110px]">
-                          <Input
-                            placeholder="Cliente"
-                            value={newSale.cliente}
-                            onChange={(event) =>
-                              setNewSale({ ...newSale, cliente: event.target.value })
-                            }
-                          />
-                          <SelectLike
-                            value={newSale.tipo}
-                            onChange={(value) =>
-                              setNewSale({ ...newSale, tipo: value as Sale["tipo"] })
-                            }
-                            options={["Celular", "Peça", "Serviço", "Combo"]}
-                          />
-                          <Input
-                            placeholder="Produto/peça/serviço"
-                            value={newSale.item}
-                            onChange={(event) =>
-                              setNewSale({ ...newSale, item: event.target.value })
-                            }
-                          />
-                          <Input
-                            placeholder="Valor"
-                            value={newSale.valor}
-                            onChange={(event) =>
-                              setNewSale({ ...newSale, valor: event.target.value })
-                            }
-                          />
-                          <Input
-                            placeholder="Entrada"
-                            value={newSale.entrada}
-                            onChange={(event) =>
-                              setNewSale({ ...newSale, entrada: event.target.value })
-                            }
-                          />
-                          <Input
-                            placeholder="Parcelas"
-                            value={newSale.parcelas}
-                            onChange={(event) =>
-                              setNewSale({ ...newSale, parcelas: event.target.value })
-                            }
-                          />
-                        </div>
-                        {newSale.modalidade === "emprestimo" && (
-                          <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                              <div>
-                                <h3 className="text-sm font-semibold text-foreground">
-                                  Empréstimo programado
-                                </h3>
-                                <p className="text-xs text-muted-foreground">
-                                  O sistema gera as cobranças mensais e acompanha cada parcela.
-                                </p>
-                              </div>
-                              <div className="rounded-full bg-surface px-3 py-2 text-xs font-semibold text-primary shadow-soft">
-                                Total programado: {brl(loanProgrammedTotalPreview)}
-                              </div>
-                            </div>
-                            <div className="grid gap-3 md:grid-cols-3">
-                              <Input
-                                placeholder="Juros mensal %"
-                                value={newSale.jurosMensal}
-                                inputMode="decimal"
-                                onChange={(event) =>
-                                  setNewSale({ ...newSale, jurosMensal: event.target.value })
-                                }
-                              />
-                              <Input
-                                placeholder="Dia da cobrança"
-                                value={newSale.diaCobranca}
-                                inputMode="numeric"
-                                onChange={(event) =>
-                                  setNewSale({ ...newSale, diaCobranca: event.target.value })
-                                }
-                              />
-                              <Input
-                                type="date"
-                                value={newSale.primeiraParcela}
-                                onChange={(event) =>
-                                  setNewSale({ ...newSale, primeiraParcela: event.target.value })
-                                }
-                              />
-                            </div>
-                            {loanSchedulePreview.length > 0 && (
-                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                {loanSchedulePreview.slice(0, 8).map((installment) => (
-                                  <div
-                                    key={installment.id}
-                                    className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
+                        <div className="space-y-4">
+                          <section className="rounded-[22px] border border-border bg-surface-muted p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <h3 className="text-sm font-semibold text-foreground">
+                                Dados da venda
+                              </h3>
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { id: "avista", label: "Venda normal" },
+                                  { id: "fiado", label: "Fiado" },
+                                  { id: "emprestimo", label: "Emprestimo" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setNewSale({
+                                        ...newSale,
+                                        modalidade: option.id as NonNullable<Sale["modalidade"]>,
+                                        parcelas: option.id === "avista" ? "1" : newSale.parcelas,
+                                      })
+                                    }
+                                    className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                                      newSale.modalidade === option.id
+                                        ? "bg-primary text-primary-foreground shadow-soft"
+                                        : "bg-surface text-muted-foreground hover:text-foreground"
+                                    }`}
                                   >
-                                    <p className="font-semibold text-foreground">
-                                      Parcela {installment.numero}/{loanInstallmentsPreview}
-                                    </p>
-                                    <p className="mt-1 text-muted-foreground">
-                                      {installment.vencimento} • {brl(installment.valor)}
-                                    </p>
-                                  </div>
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              <FieldBlock label="Cliente">
+                                <SelectLike
+                                  value={newSale.cliente}
+                                  onChange={(value) => setNewSale({ ...newSale, cliente: value })}
+                                  placeholder="Selecionar cliente"
+                                  options={clients.map((client) => client.nome)}
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Vendedor">
+                                <Input
+                                  value={saleMeta.vendedor}
+                                  onChange={(event) =>
+                                    setSaleMeta({ ...saleMeta, vendedor: event.target.value })
+                                  }
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Data da venda">
+                                <Input
+                                  type="date"
+                                  value={saleMeta.data}
+                                  onChange={(event) =>
+                                    setSaleMeta({ ...saleMeta, data: event.target.value })
+                                  }
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Tipo de entrega">
+                                <SelectLike
+                                  value={saleMeta.entrega}
+                                  onChange={(value) => setSaleMeta({ ...saleMeta, entrega: value })}
+                                  options={["Retirada", "Entrega", "A combinar"]}
+                                />
+                              </FieldBlock>
+                            </div>
+                          </section>
+
+                          <section className="rounded-[22px] border border-border bg-surface-muted p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <h3 className="text-sm font-semibold text-foreground">
+                                Itens da venda
+                              </h3>
+                              <span className="rounded-full bg-surface px-3 py-1.5 text-xs font-semibold text-muted-foreground shadow-soft">
+                                {saleStockOptions.length} itens disponiveis
+                              </span>
+                            </div>
+                            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_120px_150px_auto]">
+                              <FieldBlock label="Produto do estoque">
+                                <SelectLike
+                                  value={saleItemDraft.productKey}
+                                  onChange={(value) =>
+                                    setSaleItemDraft({ ...saleItemDraft, productKey: value })
+                                  }
+                                  placeholder="Selecionar produto, peca ou OS"
+                                  options={saleStockOptions.map((option) => ({
+                                    value: option.key,
+                                    label: option.label,
+                                  }))}
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Qtd.">
+                                <Input
+                                  value={saleItemDraft.quantidade}
+                                  inputMode="numeric"
+                                  onChange={(event) =>
+                                    setSaleItemDraft({
+                                      ...saleItemDraft,
+                                      quantidade: event.target.value,
+                                    })
+                                  }
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Desconto">
+                                <Input
+                                  placeholder="0,00"
+                                  value={saleItemDraft.desconto}
+                                  inputMode="decimal"
+                                  onChange={(event) =>
+                                    setSaleItemDraft({
+                                      ...saleItemDraft,
+                                      desconto: event.target.value,
+                                    })
+                                  }
+                                />
+                              </FieldBlock>
+                              <div className="flex items-end">
+                                <Button type="button" onClick={addSelectedSaleItem}>
+                                  <Plus className="h-4 w-4" /> Adicionar produto
+                                </Button>
+                              </div>
+                            </div>
+                            {selectedSaleStockOption && (
+                              <div className="mt-3 rounded-2xl bg-surface p-3 text-xs text-muted-foreground shadow-soft">
+                                <strong className="text-foreground">
+                                  {selectedSaleStockOption.title}
+                                </strong>{" "}
+                                - custo {brl(selectedSaleStockOption.cost)} - venda{" "}
+                                {brl(selectedSaleStockOption.price)} - estoque{" "}
+                                {selectedSaleStockOption.available}
+                              </div>
+                            )}
+                            <div className="mt-4 overflow-hidden rounded-[18px] bg-surface shadow-soft">
+                              <ResponsiveTable
+                                columns={[
+                                  "Produto",
+                                  "Qtd.",
+                                  "Unitario",
+                                  "Desconto",
+                                  "Total",
+                                  "Acoes",
+                                ]}
+                                rows={saleItems.map((item) => [
+                                  <ItemTitle
+                                    key="produto"
+                                    title={item.title}
+                                    subtitle={item.subtitle}
+                                  />,
+                                  String(item.quantity),
+                                  brl(item.price),
+                                  brl(item.discount),
+                                  brl(item.price * item.quantity - item.discount),
+                                  <ActionButton
+                                    key="remover"
+                                    icon={Trash2}
+                                    label="Remover"
+                                    danger
+                                    onClick={() =>
+                                      setSaleItems((items) =>
+                                        items.filter((current) => current.key !== item.key),
+                                      )
+                                    }
+                                  />,
+                                ])}
+                              />
+                            </div>
+                          </section>
+
+                          <section className="rounded-[22px] border border-border bg-surface-muted p-4">
+                            <h3 className="mb-3 text-sm font-semibold text-foreground">
+                              Dados do pagamento
+                            </h3>
+                            <div className="grid gap-3 lg:grid-cols-[190px_150px_120px_1fr_auto]">
+                              <FieldBlock label="Forma">
+                                <SelectLike
+                                  value={salePaymentDraft.forma}
+                                  onChange={(value) =>
+                                    setSalePaymentDraft({ ...salePaymentDraft, forma: value })
+                                  }
+                                  options={[
+                                    "Pix",
+                                    "Dinheiro",
+                                    "Cartao de credito",
+                                    "Cartao de debito",
+                                    "Boleto",
+                                    "Fiado",
+                                    "Outro",
+                                  ]}
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Valor pago/entrada">
+                                <Input
+                                  placeholder="0,00"
+                                  value={salePaymentDraft.valor}
+                                  inputMode="decimal"
+                                  onChange={(event) =>
+                                    setSalePaymentDraft({
+                                      ...salePaymentDraft,
+                                      valor: event.target.value,
+                                    })
+                                  }
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Parcelas">
+                                <Input
+                                  value={salePaymentDraft.parcelas}
+                                  inputMode="numeric"
+                                  onChange={(event) =>
+                                    setSalePaymentDraft({
+                                      ...salePaymentDraft,
+                                      parcelas: event.target.value,
+                                    })
+                                  }
+                                />
+                              </FieldBlock>
+                              <FieldBlock label="Observacao">
+                                <Input
+                                  placeholder="Comprovante, combinado, maquina..."
+                                  value={salePaymentDraft.observacao}
+                                  onChange={(event) =>
+                                    setSalePaymentDraft({
+                                      ...salePaymentDraft,
+                                      observacao: event.target.value,
+                                    })
+                                  }
+                                />
+                              </FieldBlock>
+                              <div className="flex items-end">
+                                <Button type="button" variant="outline" onClick={addSalePayment}>
+                                  + Adicionar pagamento
+                                </Button>
+                              </div>
+                            </div>
+                            {salePayments.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {salePayments.map((payment) => (
+                                  <button
+                                    key={payment.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setSalePayments((items) =>
+                                        items.filter((item) => item.id !== payment.id),
+                                      )
+                                    }
+                                    className="rounded-full bg-surface px-3 py-2 text-xs font-semibold text-foreground shadow-soft"
+                                  >
+                                    {payment.forma}: {brl(payment.valor)} x{payment.parcelas}
+                                  </button>
                                 ))}
                               </div>
                             )}
+                            {(newSale.modalidade === "fiado" ||
+                              newSale.modalidade === "emprestimo") && (
+                              <div className="mt-4 grid gap-3 rounded-[18px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-3">
+                                <FieldBlock label="Parcelas pendentes">
+                                  <Input
+                                    value={newSale.parcelas}
+                                    inputMode="numeric"
+                                    onChange={(event) =>
+                                      setNewSale({ ...newSale, parcelas: event.target.value })
+                                    }
+                                  />
+                                </FieldBlock>
+                                <FieldBlock label="Dia da cobranca">
+                                  <Input
+                                    value={newSale.diaCobranca}
+                                    inputMode="numeric"
+                                    onChange={(event) =>
+                                      setNewSale({ ...newSale, diaCobranca: event.target.value })
+                                    }
+                                  />
+                                </FieldBlock>
+                                <FieldBlock label="Primeira cobranca">
+                                  <Input
+                                    type="date"
+                                    value={newSale.primeiraParcela}
+                                    onChange={(event) =>
+                                      setNewSale({
+                                        ...newSale,
+                                        primeiraParcela: event.target.value,
+                                      })
+                                    }
+                                  />
+                                </FieldBlock>
+                              </div>
+                            )}
+                          </section>
+
+                          <section className="grid gap-4 rounded-[22px] border border-border bg-surface-muted p-4 lg:grid-cols-[1fr_320px]">
+                            <FieldBlock label="Observacoes da venda">
+                              <Textarea
+                                className="min-h-24 rounded-[18px] bg-surface"
+                                placeholder="Detalhes combinados, garantia, entrega, observacoes internas..."
+                                value={saleMeta.observacoes}
+                                onChange={(event) =>
+                                  setSaleMeta({ ...saleMeta, observacoes: event.target.value })
+                                }
+                              />
+                            </FieldBlock>
+                            <div className="rounded-[20px] bg-ink p-5 text-ink-foreground shadow-ink">
+                              <p className="text-xs text-white/60">Finalizar venda</p>
+                              <div className="mt-4 space-y-2 text-sm">
+                                <SummaryRow label="Total bruto" value={brl(saleTotals.gross)} />
+                                <SummaryRow label="Desconto" value={brl(saleTotals.discount)} />
+                                <SummaryRow label="Total liquido" value={brl(saleNetTotal)} />
+                                <SummaryRow label="Valor pago" value={brl(saleTotals.paid)} />
+                                <SummaryRow label="Pendente" value={brl(salePendingTotal)} />
+                                <SummaryRow label="Lucro previsto" value={brl(saleTotals.profit)} />
+                              </div>
+                              <Button className="mt-5 w-full" onClick={finalizeStoreSale}>
+                                Finalizar venda
+                              </Button>
+                            </div>
+                          </section>
+                        </div>
+                        <div className="hidden">
+                          <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
+                            {[
+                              { id: "avista", label: "A vista" },
+                              { id: "fiado", label: "Fiado" },
+                              { id: "emprestimo", label: "Emprestimo" },
+                            ].map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() =>
+                                  setNewSale({
+                                    ...newSale,
+                                    modalidade: option.id as NonNullable<Sale["modalidade"]>,
+                                    parcelas: option.id === "avista" ? "1" : newSale.parcelas,
+                                  })
+                                }
+                                className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                                  newSale.modalidade === option.id
+                                    ? "bg-primary text-primary-foreground shadow-soft"
+                                    : "bg-surface text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
                           </div>
-                        )}
+                          <div className="grid gap-3 lg:grid-cols-[1fr_150px_1fr_130px_130px_110px]">
+                            <Input
+                              placeholder="Cliente"
+                              value={newSale.cliente}
+                              onChange={(event) =>
+                                setNewSale({ ...newSale, cliente: event.target.value })
+                              }
+                            />
+                            <SelectLike
+                              value={newSale.tipo}
+                              onChange={(value) =>
+                                setNewSale({ ...newSale, tipo: value as Sale["tipo"] })
+                              }
+                              options={["Celular", "Peça", "Serviço", "Combo"]}
+                            />
+                            <Input
+                              placeholder="Produto/peça/serviço"
+                              value={newSale.item}
+                              onChange={(event) =>
+                                setNewSale({ ...newSale, item: event.target.value })
+                              }
+                            />
+                            <Input
+                              placeholder="Valor"
+                              value={newSale.valor}
+                              onChange={(event) =>
+                                setNewSale({ ...newSale, valor: event.target.value })
+                              }
+                            />
+                            <Input
+                              placeholder="Entrada"
+                              value={newSale.entrada}
+                              onChange={(event) =>
+                                setNewSale({ ...newSale, entrada: event.target.value })
+                              }
+                            />
+                            <Input
+                              placeholder="Parcelas"
+                              value={newSale.parcelas}
+                              onChange={(event) =>
+                                setNewSale({ ...newSale, parcelas: event.target.value })
+                              }
+                            />
+                          </div>
+                          {newSale.modalidade === "emprestimo" && (
+                            <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                  <h3 className="text-sm font-semibold text-foreground">
+                                    Empréstimo programado
+                                  </h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    O sistema gera as cobranças mensais e acompanha cada parcela.
+                                  </p>
+                                </div>
+                                <div className="rounded-full bg-surface px-3 py-2 text-xs font-semibold text-primary shadow-soft">
+                                  Total programado: {brl(loanProgrammedTotalPreview)}
+                                </div>
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-3">
+                                <Input
+                                  placeholder="Juros mensal %"
+                                  value={newSale.jurosMensal}
+                                  inputMode="decimal"
+                                  onChange={(event) =>
+                                    setNewSale({ ...newSale, jurosMensal: event.target.value })
+                                  }
+                                />
+                                <Input
+                                  placeholder="Dia da cobrança"
+                                  value={newSale.diaCobranca}
+                                  inputMode="numeric"
+                                  onChange={(event) =>
+                                    setNewSale({ ...newSale, diaCobranca: event.target.value })
+                                  }
+                                />
+                                <Input
+                                  type="date"
+                                  value={newSale.primeiraParcela}
+                                  onChange={(event) =>
+                                    setNewSale({ ...newSale, primeiraParcela: event.target.value })
+                                  }
+                                />
+                              </div>
+                              {loanSchedulePreview.length > 0 && (
+                                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                  {loanSchedulePreview.slice(0, 8).map((installment) => (
+                                    <div
+                                      key={installment.id}
+                                      className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
+                                    >
+                                      <p className="font-semibold text-foreground">
+                                        Parcela {installment.numero}/{loanInstallmentsPreview}
+                                      </p>
+                                      <p className="mt-1 text-muted-foreground">
+                                        {installment.vencimento} • {brl(installment.valor)}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </ModuleCard>
                     </DialogContent>
                   </Dialog>
@@ -4749,7 +5441,7 @@ function SelectLike({
 }: {
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<string | { value: string; label: string }>;
   placeholder?: string;
 }) {
   return (
@@ -4763,12 +5455,33 @@ function SelectLike({
           {placeholder}
         </option>
       )}
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
+      {options.map((option) => {
+        const normalized = typeof option === "string" ? { value: option, label: option } : option;
+        return (
+          <option key={normalized.value} value={normalized.value}>
+            {normalized.label}
+          </option>
+        );
+      })}
     </select>
+  );
+}
+
+function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-1.5 text-xs font-semibold text-foreground">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-white/62">{label}</span>
+      <strong className="text-right text-white">{value}</strong>
+    </div>
   );
 }
 
@@ -5201,10 +5914,13 @@ async function saveLojaInventoryProduct({
 async function updateLojaInventoryProduct(
   item: Phone | Part | ServiceOrder,
   kind: "phone" | "part" | "service",
+  userId?: string,
 ) {
   if (!item.productId) {
-    toast.error("Este item antigo nao tem vinculo com o banco. Cadastre novamente para editar.");
-    return null;
+    if (!userId) {
+      toast.error("Este item antigo nao tem vinculo com o banco. Cadastre novamente para editar.");
+      return null;
+    }
   }
 
   const name =
@@ -5229,6 +5945,21 @@ async function updateLojaInventoryProduct(
         : (item as ServiceOrder).imei || `OS-${item.id}`;
 
   const meta = inventoryMeta(kind, item as Phone & Part & ServiceOrder);
+  const fallbackRow: InventoryProductRow = {
+    id: item.productId || crypto.randomUUID(),
+    nome: name,
+    sku,
+    preco_venda: price,
+    quantidade: quantity,
+    estoque_minimo: minimum,
+    status: item.status,
+    observacoes: JSON.stringify(meta),
+  };
+  if (!item.productId) {
+    saveLocalLojaInventoryProduct(userId!, fallbackRow);
+    return parseInventoryProduct(fallbackRow)?.item ?? null;
+  }
+
   const { data: saved, error } = await supabase
     .from("products")
     .update({
@@ -5245,6 +5976,10 @@ async function updateLojaInventoryProduct(
     .maybeSingle();
 
   if (error || !saved) {
+    if (userId) {
+      saveLocalLojaInventoryProduct(userId, fallbackRow);
+      return parseInventoryProduct(fallbackRow)?.item ?? null;
+    }
     toast.error("Nao consegui atualizar o item no banco da sua conta");
     return null;
   }
