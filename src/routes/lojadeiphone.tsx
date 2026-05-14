@@ -1070,7 +1070,7 @@ function LojaDeIphonePage() {
   const { session, loading, signOut, user } = useAuth();
   const askFiadoAI = useServerFn(askFiadoAIServer);
   const [active, setActive] = useState<TabId>("dashboard");
-  const [dashboardPeriod, setDashboardPeriod] = useState<"Hoje" | "Mes">("Mes");
+  const [dashboardDate, setDashboardDate] = useState(today);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [categoryFilter, setCategoryFilter] = useState("Todos");
@@ -1239,8 +1239,7 @@ function LojaDeIphonePage() {
 
   const totals = useMemo(() => {
     const isDashboardDate = (isoDate: string) => {
-      if (dashboardPeriod === "Hoje") return isoDate === today;
-      return isoDate.slice(0, 7) === today.slice(0, 7);
+      return isoDate === dashboardDate;
     };
     const periodSales = sales.filter(
       (item) =>
@@ -1290,7 +1289,7 @@ function LojaDeIphonePage() {
             0,
           ) + parts.reduce((acc, item) => acc + (item.preco - item.custo) * item.quantidade, 0),
     };
-  }, [clients, dashboardPeriod, parts, payments, phones, sales, services]);
+  }, [clients, dashboardDate, parts, payments, phones, sales, services]);
 
   if (loading) {
     return (
@@ -3106,8 +3105,8 @@ function LojaDeIphonePage() {
             {active === "dashboard" && (
               <DashboardView
                 totals={totals}
-                period={dashboardPeriod}
-                onPeriodChange={setDashboardPeriod}
+                selectedDate={dashboardDate}
+                onDateChange={setDashboardDate}
                 phones={phones}
                 parts={parts}
                 services={services}
@@ -4597,16 +4596,16 @@ function LojaDeIphonePage() {
 
 function DashboardView({
   totals,
-  period,
-  onPeriodChange,
+  selectedDate,
+  onDateChange,
   phones,
   parts,
   services,
   clients,
 }: {
   totals: ReturnType<typeof computeTotalsShape>;
-  period: "Hoje" | "Mes";
-  onPeriodChange: (period: "Hoje" | "Mes") => void;
+  selectedDate: string;
+  onDateChange: (date: string) => void;
   phones: Phone[];
   parts: Part[];
   services: ServiceOrder[];
@@ -4634,35 +4633,30 @@ function DashboardView({
         <div>
           <p className="text-sm font-semibold text-foreground">Filtro de vendas</p>
           <p className="text-xs text-muted-foreground">
-            Dashboard separado de emprestimos, contando apenas vendas reais.
+            Selecione o dia para ver apenas as vendas reais dessa data.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2 rounded-full bg-surface-muted p-1">
-          {(["Hoje", "Mes"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => onPeriodChange(option)}
-              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
-                period === option
-                  ? "bg-primary text-primary-foreground shadow-soft"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {option === "Hoje" ? "Vendas diarias" : "Vendas no mes"}
-            </button>
-          ))}
+        <div className="flex flex-col gap-2 rounded-[18px] bg-surface-muted p-2 sm:min-w-[260px]">
+          <Label className="px-2 text-[11px] font-semibold uppercase text-muted-foreground">
+            Dia das vendas
+          </Label>
+          <Input
+            type="date"
+            value={selectedDate}
+            onChange={(event) => onDateChange(event.target.value)}
+            className="rounded-2xl bg-surface"
+          />
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Total vendido no mês"
+          title="Total vendido no dia"
           value={brl(totals.totalVendido)}
           subtitle="Celulares, peças e serviços"
           icon={BadgeDollarSign}
         />
         <MetricCard
-          title="Total recebido no mês"
+          title="Total recebido no dia"
           value={brl(totals.totalRecebido)}
           subtitle="Pagamentos confirmados"
           icon={Wallet}
@@ -4675,7 +4669,7 @@ function DashboardView({
           dark
         />
         <MetricCard
-          title="Lucro estimado do mês"
+          title="Lucro estimado do dia"
           value={brl(totals.lucro)}
           subtitle="Margem prevista"
           icon={TrendingUp}
