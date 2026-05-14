@@ -181,11 +181,13 @@ type Sale = {
   entrada: number;
   parcelas: number;
   vencimento: string;
+  dataVenda?: string;
   status: SaleStatus;
   lucro: number;
   modalidade?: "avista" | "fiado" | "emprestimo";
   jurosMensal?: number;
   diaCobranca?: number;
+  frequenciaCobranca?: "semanal" | "mensal";
   totalProgramado?: number;
   parcelasAgenda?: LoanInstallment[];
 };
@@ -226,6 +228,7 @@ type LoanForm = {
   parcelas: string;
   jurosMensal: string;
   diaCobranca: string;
+  frequenciaCobranca: "semanal" | "mensal";
   primeiraParcela: string;
 };
 
@@ -1067,6 +1070,7 @@ function LojaDeIphonePage() {
   const { session, loading, signOut, user } = useAuth();
   const askFiadoAI = useServerFn(askFiadoAIServer);
   const [active, setActive] = useState<TabId>("dashboard");
+  const [dashboardPeriod, setDashboardPeriod] = useState<"Hoje" | "Mes">("Mes");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [categoryFilter, setCategoryFilter] = useState("Todos");
@@ -1141,6 +1145,7 @@ function LojaDeIphonePage() {
     modalidade: "avista" as NonNullable<Sale["modalidade"]>,
     jurosMensal: "0",
     diaCobranca: "20",
+    frequenciaCobranca: "mensal" as "semanal" | "mensal",
     primeiraParcela: "2026-06-20",
   });
   const [saleMeta, setSaleMeta] = useState({
@@ -1170,6 +1175,7 @@ function LojaDeIphonePage() {
     parcelas: "1",
     jurosMensal: "0",
     diaCobranca: "20",
+    frequenciaCobranca: "mensal",
     primeiraParcela: "2026-06-20",
   });
 
@@ -1226,12 +1232,23 @@ function LojaDeIphonePage() {
   }, [businessLoaded, clients, payments, sales, userId]);
 
   const totals = useMemo(() => {
-    const totalVendido = sales.reduce(
+    const isDashboardDate = (isoDate: string) => {
+      if (dashboardPeriod === "Hoje") return isoDate === today;
+      return isoDate.slice(0, 7) === today.slice(0, 7);
+    };
+    const periodSales = sales.filter(
+      (item) =>
+        item.modalidade !== "emprestimo" && isDashboardDate(item.dataVenda ?? item.vencimento),
+    );
+    const periodPayments = payments.filter(
+      (item) => isDashboardDate(item.data) && !item.forma.toLowerCase().includes("emprestimo"),
+    );
+    const totalVendido = periodSales.reduce(
       (acc, item) => acc + item.unitario * item.quantidade - item.desconto,
       0,
     );
-    const totalRecebido = payments.reduce((acc, item) => acc + item.valor, 0);
-    const totalFiado = sales.reduce(
+    const totalRecebido = periodPayments.reduce((acc, item) => acc + item.valor, 0);
+    const totalFiado = periodSales.reduce(
       (acc, item) =>
         acc + Math.max(item.unitario * item.quantidade - item.desconto - item.entrada, 0),
       0,
@@ -1252,7 +1269,8 @@ function LojaDeIphonePage() {
       availablePhones,
       openClients,
       activeServices,
-      lucro: sales.reduce((acc, item) => acc + item.lucro, 0),
+      lucro: periodSales.reduce((acc, item) => acc + item.lucro, 0),
+      periodSales,
       estoqueParado:
         phones
           .filter((item) => item.status !== "Vendido")
@@ -1266,7 +1284,7 @@ function LojaDeIphonePage() {
             0,
           ) + parts.reduce((acc, item) => acc + (item.preco - item.custo) * item.quantidade, 0),
     };
-  }, [clients, parts, payments, phones, sales, services]);
+  }, [clients, dashboardPeriod, parts, payments, phones, sales, services]);
 
   if (loading) {
     return (
@@ -1317,6 +1335,7 @@ function LojaDeIphonePage() {
   );
   const filteredSales = sales.filter(
     (item) =>
+      item.modalidade !== "emprestimo" &&
       matchesFilters(
         [item.cliente, item.item, item.tipo, item.status],
         query,
@@ -1476,6 +1495,7 @@ function LojaDeIphonePage() {
           firstDueDate:
             newSale.primeiraParcela || nextDueDate(today, Number(newSale.diaCobranca) || 20),
           chargeDay: Number(newSale.diaCobranca) || 20,
+          frequency: newSale.frequenciaCobranca,
           count: loanInstallmentsPreview,
           total: loanProgrammedTotalPreview,
         })
@@ -1497,6 +1517,7 @@ function LojaDeIphonePage() {
       ? buildLoanSchedule({
           firstDueDate: newLoan.primeiraParcela || nextDueDate(today, loanFormChargeDayPreview),
           chargeDay: loanFormChargeDayPreview,
+          frequency: newLoan.frequenciaCobranca,
           count: loanFormInstallmentsPreview,
           total: loanFormProgrammedTotalPreview,
         })
@@ -2144,6 +2165,7 @@ function LojaDeIphonePage() {
       modalidade: "avista" as NonNullable<Sale["modalidade"]>,
       jurosMensal: "0",
       diaCobranca: "20",
+      frequenciaCobranca: "mensal" as "semanal" | "mensal",
       primeiraParcela: nextDueDate(today, 20),
     });
     setSaleMeta({ vendedor: firstName, data: today, entrega: "Retirada", observacoes: "" });
@@ -2340,6 +2362,7 @@ function LojaDeIphonePage() {
         ? buildLoanSchedule({
             firstDueDate: newSale.primeiraParcela || nextDueDate(saleMeta.data, chargeDay),
             chargeDay,
+            frequency: modality === "emprestimo" ? newSale.frequenciaCobranca : "mensal",
             count: installments,
             total: salePendingTotal,
           })
@@ -2375,10 +2398,12 @@ function LojaDeIphonePage() {
       entrada: saleTotals.paid,
       parcelas: installments,
       vencimento: schedule?.[0]?.vencimento ?? saleMeta.data,
+      dataVenda: saleMeta.data,
       status,
       lucro: saleTotals.profit,
       modalidade: modality,
       diaCobranca: chargeDay,
+      frequenciaCobranca: modality === "emprestimo" ? newSale.frequenciaCobranca : "mensal",
       totalProgramado: salePendingTotal,
       parcelasAgenda: schedule,
     };
@@ -2456,6 +2481,7 @@ function LojaDeIphonePage() {
         ? buildLoanSchedule({
             firstDueDate: newSale.primeiraParcela || nextDueDate(today, chargeDay),
             chargeDay,
+            frequency: newSale.frequenciaCobranca,
             count: installments,
             total: programmedTotal,
           })
@@ -2472,11 +2498,13 @@ function LojaDeIphonePage() {
       entrada: entry,
       parcelas: installments,
       vencimento: schedule?.[0]?.vencimento ?? newSale.primeiraParcela,
+      dataVenda: today,
       status: entry >= value ? "Pago" : entry > 0 ? "Parcial" : "Em aberto",
       lucro: Math.max(value * 0.35, 0),
       modalidade: newSale.modalidade,
       jurosMensal: monthlyInterest,
       diaCobranca: chargeDay,
+      frequenciaCobranca: isLoan ? newSale.frequenciaCobranca : "mensal",
       totalProgramado: programmedTotal,
       parcelasAgenda: schedule,
     };
@@ -2545,6 +2573,7 @@ function LojaDeIphonePage() {
         ? buildLoanSchedule({
             firstDueDate: newLoan.primeiraParcela || nextDueDate(today, chargeDay),
             chargeDay,
+            frequency: newLoan.frequenciaCobranca,
             count: installments,
             total: programmedTotal,
           })
@@ -2563,11 +2592,13 @@ function LojaDeIphonePage() {
       entrada: entry,
       parcelas: installments,
       vencimento: schedule?.[0]?.vencimento ?? newLoan.primeiraParcela,
+      dataVenda: today,
       status: entry >= value ? "Pago" : entry > 0 ? "Parcial" : "Em aberto",
       lucro: Math.max(value * 0.25, 0),
       modalidade: "emprestimo",
       jurosMensal: monthlyInterest,
       diaCobranca: chargeDay,
+      frequenciaCobranca: newLoan.frequenciaCobranca,
       totalProgramado: programmedTotal,
       parcelasAgenda: schedule,
     };
@@ -2616,6 +2647,7 @@ function LojaDeIphonePage() {
       parcelas: "1",
       jurosMensal: "0",
       diaCobranca: "20",
+      frequenciaCobranca: "mensal",
       primeiraParcela: nextDueDate(today, 20),
     });
     setFormModal(null);
@@ -2942,11 +2974,12 @@ function LojaDeIphonePage() {
             {active === "dashboard" && (
               <DashboardView
                 totals={totals}
+                period={dashboardPeriod}
+                onPeriodChange={setDashboardPeriod}
                 phones={phones}
                 parts={parts}
                 services={services}
                 clients={clients}
-                sales={sales}
               />
             )}
 
@@ -3693,7 +3726,7 @@ function LojaDeIphonePage() {
                               </div>
                             )}
                             {showSaleChargeSchedule && (
-                              <div className="mt-4 grid gap-3 rounded-[18px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-3">
+                              <div className="mt-4 grid gap-3 rounded-[18px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-4">
                                 <FieldBlock label="Parcelas pendentes">
                                   <Input
                                     value={newSale.parcelas}
@@ -3703,10 +3736,28 @@ function LojaDeIphonePage() {
                                     }
                                   />
                                 </FieldBlock>
+                                {newSale.modalidade === "emprestimo" && (
+                                  <FieldBlock label="Frequencia">
+                                    <SelectLike
+                                      value={newSale.frequenciaCobranca}
+                                      onChange={(value) =>
+                                        setNewSale({
+                                          ...newSale,
+                                          frequenciaCobranca: value as "semanal" | "mensal",
+                                        })
+                                      }
+                                      options={["semanal", "mensal"]}
+                                    />
+                                  </FieldBlock>
+                                )}
                                 <FieldBlock label="Dia da cobranca">
                                   <Input
                                     value={newSale.diaCobranca}
                                     inputMode="numeric"
+                                    disabled={
+                                      newSale.modalidade === "emprestimo" &&
+                                      newSale.frequenciaCobranca === "semanal"
+                                    }
                                     onChange={(event) =>
                                       setNewSale({ ...newSale, diaCobranca: event.target.value })
                                     }
@@ -3890,7 +3941,7 @@ function LojaDeIphonePage() {
                     </DialogContent>
                   </Dialog>
                 )}
-                {sales.some((sale) => sale.parcelasAgenda?.length) && (
+                {formModal === "loan" && sales.some((sale) => sale.parcelasAgenda?.length) && (
                   <DataCard title="Empréstimos programados">
                     <ResponsiveTable
                       columns={[
@@ -3963,7 +4014,7 @@ function LojaDeIphonePage() {
                         icon={Wallet}
                         action={<Button onClick={registerLoan}>Registrar emprestimo</Button>}
                       >
-                        <div className="grid gap-3 lg:grid-cols-[1fr_1.4fr_130px_130px_110px_120px_150px]">
+                        <div className="grid gap-3 lg:grid-cols-[1fr_1.4fr_130px_130px_110px_130px_120px_150px]">
                           <div className="space-y-1.5">
                             <Label>Cliente</Label>
                             <Input
@@ -4034,10 +4085,28 @@ function LojaDeIphonePage() {
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label>Dia cobranca</Label>
+                            <Label>Frequencia</Label>
+                            <SelectLike
+                              value={newLoan.frequenciaCobranca}
+                              onChange={(value) =>
+                                setNewLoan({
+                                  ...newLoan,
+                                  frequenciaCobranca: value as "semanal" | "mensal",
+                                })
+                              }
+                              options={["semanal", "mensal"]}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>
+                              {newLoan.frequenciaCobranca === "semanal"
+                                ? "Dia mensal"
+                                : "Dia cobranca"}
+                            </Label>
                             <Input
                               placeholder="20"
                               value={newLoan.diaCobranca}
+                              disabled={newLoan.frequenciaCobranca === "semanal"}
                               inputMode="numeric"
                               onChange={(event) =>
                                 setNewLoan({ ...newLoan, diaCobranca: event.target.value })
@@ -4373,24 +4442,26 @@ function LojaDeIphonePage() {
 
 function DashboardView({
   totals,
+  period,
+  onPeriodChange,
   phones,
   parts,
   services,
   clients,
-  sales,
 }: {
   totals: ReturnType<typeof computeTotalsShape>;
+  period: "Hoje" | "Mes";
+  onPeriodChange: (period: "Hoje" | "Mes") => void;
   phones: Phone[];
   parts: Part[];
   services: ServiceOrder[];
   clients: Client[];
-  sales: Sale[];
 }) {
   const categoryTotals = ["Celular", "Peça", "Serviço"].map((category) => ({
     label: category,
-    value: sales
+    value: totals.periodSales
       .filter((sale) => sale.tipo === category)
-      .reduce((acc, sale) => acc + sale.unitario - sale.desconto, 0),
+      .reduce((acc, sale) => acc + sale.unitario * sale.quantidade - sale.desconto, 0),
   }));
   const maxCategory = Math.max(...categoryTotals.map((item) => item.value), 1);
   const months = [
@@ -4404,6 +4475,30 @@ function DashboardView({
 
   return (
     <div className="motion-list flex min-w-0 flex-col gap-4 sm:gap-6">
+      <div className="flex flex-col gap-3 rounded-[22px] bg-surface p-3 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Filtro de vendas</p>
+          <p className="text-xs text-muted-foreground">
+            Dashboard separado de emprestimos, contando apenas vendas reais.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 rounded-full bg-surface-muted p-1">
+          {(["Hoje", "Mes"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onPeriodChange(option)}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                period === option
+                  ? "bg-primary text-primary-foreground shadow-soft"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {option === "Hoje" ? "Vendas diarias" : "Vendas no mes"}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Total vendido no mês"
@@ -6143,11 +6238,13 @@ function nextDueDate(baseISO: string, chargeDay: number) {
 function buildLoanSchedule({
   firstDueDate,
   chargeDay,
+  frequency = "mensal",
   count,
   total,
 }: {
   firstDueDate: string;
   chargeDay: number;
+  frequency?: "semanal" | "mensal";
   count: number;
   total: number;
 }) {
@@ -6157,9 +6254,19 @@ function buildLoanSchedule({
   const firstDate = new Date(`${firstDueDate}T12:00:00`);
 
   return Array.from({ length: count }, (_, index): LoanInstallment => {
-    const dueDate = new Date(firstDate.getFullYear(), firstDate.getMonth() + index, 1, 12);
-    const lastDay = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate();
-    dueDate.setDate(Math.min(chargeDay, lastDay));
+    const dueDate =
+      frequency === "semanal"
+        ? new Date(
+            firstDate.getFullYear(),
+            firstDate.getMonth(),
+            firstDate.getDate() + index * 7,
+            12,
+          )
+        : new Date(firstDate.getFullYear(), firstDate.getMonth() + index, 1, 12);
+    if (frequency === "mensal") {
+      const lastDay = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate();
+      dueDate.setDate(Math.min(chargeDay, lastDay));
+    }
     return {
       id: Date.now() + index + 1,
       numero: index + 1,
@@ -6473,6 +6580,7 @@ function computeTotalsShape() {
     openClients: 0,
     activeServices: [] as ServiceOrder[],
     lucro: 0,
+    periodSales: [] as Sale[],
     estoqueParado: 0,
     lucroPotencial: 0,
   };
