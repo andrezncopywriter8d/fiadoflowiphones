@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -257,6 +257,7 @@ type StockKind = "Aparelho" | "Acessório" | "Peça";
 
 type StockProductForm = {
   kind: StockKind;
+  manual: boolean;
   codigo: string;
   tipo: string;
   sku: string;
@@ -336,6 +337,48 @@ type ImeiCheckResult = {
   blacklisted?: boolean | null;
   notes: string[];
 };
+
+const lojaInventoryLocalKey = (userId: string) => `fiado:lojadeiphone:inventory:${userId}`;
+
+function readLocalLojaInventoryProducts(userId: string): InventoryProductRow[] {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(lojaInventoryLocalKey(userId));
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as InventoryProductRow[];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalLojaInventoryProduct(userId: string, row: InventoryProductRow) {
+  if (typeof window === "undefined") return;
+  const rows = readLocalLojaInventoryProducts(userId).filter((item) => item.id !== row.id);
+  window.localStorage.setItem(lojaInventoryLocalKey(userId), JSON.stringify([row, ...rows]));
+}
+
+function hydrateInventoryRows(
+  rows: InventoryProductRow[],
+  setPhones: Dispatch<SetStateAction<Phone[]>>,
+  setParts: Dispatch<SetStateAction<Part[]>>,
+  setServices: Dispatch<SetStateAction<ServiceOrder[]>>,
+) {
+  const loadedPhones: Phone[] = [];
+  const loadedParts: Part[] = [];
+  const loadedServices: ServiceOrder[] = [];
+
+  rows.forEach((row) => {
+    const parsed = parseInventoryProduct(row);
+    if (!parsed) return;
+    if (parsed.kind === "phone") loadedPhones.push(parsed.item);
+    if (parsed.kind === "part") loadedParts.push(parsed.item);
+    if (parsed.kind === "service") loadedServices.push(parsed.item);
+  });
+
+  setPhones(loadedPhones);
+  setParts(loadedParts);
+  setServices(loadedServices);
+}
 
 const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -932,6 +975,7 @@ const today = "2026-05-13";
 
 const emptyStockProductForm: StockProductForm = {
   kind: "Peça",
+  manual: false,
   codigo: "",
   tipo: "",
   sku: "",
@@ -1077,26 +1121,18 @@ function LojaDeIphonePage() {
       .then(({ data, error }) => {
         if (!activeRequest) return;
         if (error) {
-          toast.error("Nao consegui carregar o estoque salvo da sua conta");
+          const localRows = readLocalLojaInventoryProducts(userId);
+          hydrateInventoryRows(localRows, setPhones, setParts, setServices);
+          toast.info("Carreguei o estoque salvo localmente");
           return;
         }
 
-        const rows = (data ?? []) as InventoryProductRow[];
-        const loadedPhones: Phone[] = [];
-        const loadedParts: Part[] = [];
-        const loadedServices: ServiceOrder[] = [];
-
-        rows.forEach((row) => {
-          const parsed = parseInventoryProduct(row);
-          if (!parsed) return;
-          if (parsed.kind === "phone") loadedPhones.push(parsed.item);
-          if (parsed.kind === "part") loadedParts.push(parsed.item);
-          if (parsed.kind === "service") loadedServices.push(parsed.item);
-        });
-
-        setPhones(loadedPhones);
-        setParts(loadedParts);
-        setServices(loadedServices);
+        hydrateInventoryRows(
+          [...readLocalLojaInventoryProducts(userId), ...((data ?? []) as InventoryProductRow[])],
+          setPhones,
+          setParts,
+          setServices,
+        );
       })
       .finally(() => {
         if (activeRequest) setInventoryLoading(false);
@@ -1343,6 +1379,7 @@ function LojaDeIphonePage() {
     setStockProduct({
       ...emptyStockProductForm,
       kind,
+      manual: false,
       tipo: isPhone ? "Celular" : isAccessory ? "Capinha" : "Bateria",
       nome: "",
       categoria: isPhone ? "Seminovo" : "Premium",
@@ -1621,7 +1658,9 @@ function LojaDeIphonePage() {
     const productName =
       stockProduct.kind === "Aparelho"
         ? (stockProduct.modelo || stockProduct.nome).trim()
-        : stockProduct.nome.trim();
+        : stockProduct.manual
+          ? stockProduct.nome.trim()
+          : `${stockProduct.tipo || "Peça"} ${stockProduct.modelo || stockProduct.marca}`.trim();
     const selectedType =
       stockProduct.tipo.trim() ||
       (stockProduct.kind === "Aparelho"
@@ -1631,7 +1670,11 @@ function LojaDeIphonePage() {
           : "Peça");
 
     if (!selectedType || !productName || salePrice <= 0) {
-      toast.error("Preencha tipo, nome do produto e valor de venda");
+      toast.error(
+        stockProduct.manual
+          ? "Preencha tipo, nome do produto e valor de venda"
+          : "Preencha tipo, modelo compativel e valor de venda",
+      );
       return;
     }
 
@@ -1678,11 +1721,13 @@ function LojaDeIphonePage() {
       const part: Part = {
         id: Date.now(),
         tipo: selectedType,
-        modelo: stockProduct.modelo,
+        modelo: stockProduct.manual
+          ? stockProduct.modelo || stockProduct.marca
+          : stockProduct.modelo,
         qualidade: stockProduct.categoria || stockProduct.subcategoria || "Premium",
         sku:
           stockProduct.sku ||
-          `${selectedType.slice(0, 3).toUpperCase()}-${stockProduct.modelo.replace(/\s/g, "-").toUpperCase()}`,
+          `${selectedType.slice(0, 3).toUpperCase()}-${(stockProduct.modelo || stockProduct.marca || "MANUAL").replace(/\s/g, "-").toUpperCase()}`,
         fornecedor: stockProduct.fornecedor || "Fornecedor não informado",
         custo: cost,
         preco: salePrice,
@@ -4009,7 +4054,8 @@ function StockProductFormCard({
   const profit = Math.max(sale - cost, 0);
   const margin = sale > 0 ? (profit / sale) * 100 : 0;
   const markup = cost > 0 ? (profit / cost) * 100 : 0;
-  const isPhone = form.kind === "Aparelho";
+  const isManual = form.manual;
+  const isPhone = form.kind === "Aparelho" && !isManual;
   const colorOptions = iphoneColorOptions(form.modelo);
   const updateModel = (modelo: string) => {
     onChange({
@@ -4044,9 +4090,22 @@ function StockProductFormCard({
               <button
                 key={kind}
                 type="button"
-                onClick={() => onChange({ kind })}
+                onClick={() =>
+                  onChange({
+                    kind,
+                    manual: false,
+                    marca: "Apple",
+                    modelo: kind === "Acessório" ? "" : "iPhone 11",
+                    tipo:
+                      kind === "Aparelho"
+                        ? "Celular"
+                        : kind === "Acessório"
+                          ? "Capinha"
+                          : "Bateria",
+                  })
+                }
                 className={`min-w-[110px] rounded-xl px-4 py-2 text-xs font-semibold transition ${
-                  form.kind === kind
+                  form.kind === kind && !isManual
                     ? "bg-primary text-primary-foreground shadow-soft"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -4054,6 +4113,28 @@ function StockProductFormCard({
                 {kind}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() =>
+                onChange({
+                  manual: true,
+                  kind: "Peça",
+                  tipo: "",
+                  nome: "",
+                  marca: "",
+                  modelo: "",
+                  categoria: "",
+                  cor: "",
+                })
+              }
+              className={`min-w-[140px] rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                isManual
+                  ? "bg-primary text-primary-foreground shadow-soft"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Produto manual
+            </button>
           </div>
         </div>
       </div>
@@ -4065,19 +4146,29 @@ function StockProductFormCard({
             value={form.codigo}
             onChange={(codigo) => onChange({ codigo })}
           />
-          <StockSelect
-            required
-            label="Tipo"
-            value={form.tipo}
-            onChange={(tipo) => onChange({ tipo })}
-            options={
-              isPhone
-                ? ["Celular"]
-                : form.kind === "Acessório"
-                  ? ["Capinha", "Película", "Cabo", "Carregador", "Acessório"]
-                  : partTypes
-            }
-          />
+          {isManual ? (
+            <StockField
+              required
+              label="Tipo"
+              value={form.tipo}
+              placeholder="Ex: Bateria, Tela, Película, Fone..."
+              onChange={(tipo) => onChange({ tipo })}
+            />
+          ) : (
+            <StockSelect
+              required
+              label="Tipo"
+              value={form.tipo}
+              onChange={(tipo) => onChange({ tipo })}
+              options={
+                isPhone
+                  ? ["Celular"]
+                  : form.kind === "Acessório"
+                    ? ["Capinha", "Película", "Cabo", "Carregador", "Acessório"]
+                    : partTypes
+              }
+            />
+          )}
           <StockField label="SKU" value={form.sku} onChange={(sku) => onChange({ sku })} />
           <StockField
             type="date"
@@ -4085,34 +4176,43 @@ function StockProductFormCard({
             value={form.dataEntrada}
             onChange={(dataEntrada) => onChange({ dataEntrada })}
           />
-          {!isPhone && (
+          {isManual && (
             <StockField
               required
               label="Nome produto"
               value={form.nome}
-              placeholder="Ex: Tela iPhone 11 Incell"
+              placeholder="Ex: Tela Samsung A14, Bateria Motorola G22"
               onChange={(nome) => onChange({ nome })}
             />
           )}
-          <StockSelect
-            label="Categoria"
-            value={form.categoria}
-            onChange={(categoria) => onChange({ categoria })}
-            options={
-              isPhone
-                ? ["Novo", "Seminovo", "Usado", "Vitrine", "Sucata", "Retorno de assistência"]
-                : [
-                    "Original Apple",
-                    "Original retirada",
-                    "Premium",
-                    "OLED",
-                    "Incell",
-                    "Nacional",
-                    "Paralela",
-                    "Recondicionada",
-                  ]
-            }
-          />
+          {isManual ? (
+            <StockField
+              label="Categoria"
+              value={form.categoria}
+              placeholder="Ex: Premium, Nacional, Original, Paralela"
+              onChange={(categoria) => onChange({ categoria })}
+            />
+          ) : (
+            <StockSelect
+              label="Categoria"
+              value={form.categoria}
+              onChange={(categoria) => onChange({ categoria })}
+              options={
+                isPhone
+                  ? ["Novo", "Seminovo", "Usado", "Vitrine", "Sucata", "Retorno de assistência"]
+                  : [
+                      "Original Apple",
+                      "Original retirada",
+                      "Premium",
+                      "OLED",
+                      "Incell",
+                      "Nacional",
+                      "Paralela",
+                      "Recondicionada",
+                    ]
+              }
+            />
+          )}
           <StockField label="Marca" value={form.marca} onChange={(marca) => onChange({ marca })} />
           <StockField
             type="number"
@@ -4219,18 +4319,37 @@ function StockProductFormCard({
                 onChange={(disponibilidade) => onChange({ disponibilidade })}
                 options={["Disponível para venda", "Reservada", "Defeituosa", "Sem estoque"]}
               />
-              <StockSelect
-                label="Cor"
-                value={form.cor}
-                onChange={(cor) => onChange({ cor })}
-                options={colorOptions}
-              />
-              <StockSelect
-                label="Modelo compativel"
-                value={form.modelo}
-                onChange={updateModel}
-                options={iphoneModels}
-              />
+              {isManual ? (
+                <>
+                  <StockField
+                    label="Cor"
+                    value={form.cor}
+                    placeholder="Ex: Preto, Azul, Sem cor"
+                    onChange={(cor) => onChange({ cor })}
+                  />
+                  <StockField
+                    label="Modelo compativel"
+                    value={form.modelo}
+                    placeholder="Ex: Samsung A14, Motorola G22, Universal"
+                    onChange={(modelo) => onChange({ modelo })}
+                  />
+                </>
+              ) : (
+                <>
+                  <StockSelect
+                    label="Cor"
+                    value={form.cor}
+                    onChange={(cor) => onChange({ cor })}
+                    options={colorOptions}
+                  />
+                  <StockSelect
+                    label="Modelo compativel"
+                    value={form.modelo}
+                    onChange={updateModel}
+                    options={iphoneModels}
+                  />
+                </>
+              )}
               <StockField
                 label="Subcategoria"
                 value={form.subcategoria}
@@ -5043,6 +5162,16 @@ async function saveLojaInventoryProduct({
   data: Phone | Part | ServiceOrder;
 }) {
   const meta = inventoryMeta(kind, data as Phone & Part & ServiceOrder);
+  const fallbackRow: InventoryProductRow = {
+    id: crypto.randomUUID(),
+    nome: name,
+    sku,
+    preco_venda: salePrice,
+    quantidade: quantity,
+    estoque_minimo: minimum,
+    status,
+    observacoes: JSON.stringify(meta),
+  };
   const { data: saved, error } = await supabase
     .from("products")
     .insert({
@@ -5059,8 +5188,10 @@ async function saveLojaInventoryProduct({
     .maybeSingle();
 
   if (error || !saved) {
-    toast.error("Nao consegui salvar o item no banco da sua conta");
-    return null;
+    console.error("Erro ao salvar estoque da loja de iPhone", error);
+    saveLocalLojaInventoryProduct(userId, fallbackRow);
+    toast.warning("O banco recusou agora, mas salvei o item no estoque local desta conta");
+    return parseInventoryProduct(fallbackRow)?.item ?? null;
   }
 
   const parsed = parseInventoryProduct(saved as InventoryProductRow);
