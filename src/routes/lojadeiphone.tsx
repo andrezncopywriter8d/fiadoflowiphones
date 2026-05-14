@@ -4202,18 +4202,24 @@ function LojaDeIphonePage() {
                         icon={Wallet}
                         action={<Button onClick={registerLoan}>Registrar emprestimo</Button>}
                       >
-                        <div className="grid gap-3 lg:grid-cols-[1fr_1.4fr_130px_130px_110px_130px_120px_150px]">
-                          <div className="space-y-1.5">
+                        <div className="grid gap-4 lg:grid-cols-12">
+                          <div className="space-y-1.5 lg:col-span-3">
                             <Label>Cliente</Label>
                             <Input
+                              list="iphone-loan-client-options"
                               placeholder="Nome do cliente"
                               value={newLoan.cliente}
                               onChange={(event) =>
                                 setNewLoan({ ...newLoan, cliente: event.target.value })
                               }
                             />
+                            <datalist id="iphone-loan-client-options">
+                              {clients.map((client) => (
+                                <option key={client.id} value={client.nome} />
+                              ))}
+                            </datalist>
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 lg:col-span-3">
                             <Label>Nome do item emprestado</Label>
                             <Input
                               placeholder="Ex: Bateria iPhone 13, Tela iPhone 11, iPhone 12 128GB"
@@ -4223,7 +4229,7 @@ function LojaDeIphonePage() {
                               }
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 lg:col-span-2">
                             <Label>Valor</Label>
                             <Input
                               placeholder="0,00"
@@ -4234,7 +4240,7 @@ function LojaDeIphonePage() {
                               }
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 lg:col-span-2">
                             <Label>Entrada</Label>
                             <Input
                               placeholder="0,00"
@@ -4245,7 +4251,7 @@ function LojaDeIphonePage() {
                               }
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 lg:col-span-2">
                             <Label>Parcelas</Label>
                             <Input
                               placeholder="1"
@@ -4256,7 +4262,7 @@ function LojaDeIphonePage() {
                               }
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 lg:col-span-2">
                             <Label>Frequencia</Label>
                             <SelectLike
                               value={newLoan.frequenciaCobranca}
@@ -4269,7 +4275,7 @@ function LojaDeIphonePage() {
                               options={["semanal", "mensal"]}
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 lg:col-span-2">
                             <Label>
                               {newLoan.frequenciaCobranca === "semanal"
                                 ? "Dia mensal"
@@ -4285,18 +4291,32 @@ function LojaDeIphonePage() {
                               }
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 lg:col-span-3">
                             <Label>Primeira parcela</Label>
-                            <Input
-                              type="date"
+                            <CompactDatePicker
                               value={newLoan.primeiraParcela}
+                              onChange={(date) => setNewLoan({ ...newLoan, primeiraParcela: date })}
+                            />
+                          </div>
+                          <div className="space-y-1.5 lg:col-span-2">
+                            <Label>Juros</Label>
+                            <Input
+                              placeholder="Juros %"
+                              value={newLoan.jurosMensal}
+                              inputMode="decimal"
                               onChange={(event) =>
-                                setNewLoan({ ...newLoan, primeiraParcela: event.target.value })
+                                setNewLoan({ ...newLoan, jurosMensal: event.target.value })
                               }
                             />
                           </div>
+                          <div className="rounded-[18px] bg-surface-muted px-4 py-3 lg:col-span-3">
+                            <p className="text-xs text-muted-foreground">Total programado</p>
+                            <p className="mt-1 text-2xl font-semibold text-foreground">
+                              {brl(loanFormProgrammedTotalPreview)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-[1fr_160px]">
+                        <div className="mt-4 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
                           <div>
                             <p className="text-sm font-semibold text-foreground">
                               Agenda de cobranca
@@ -4320,21 +4340,6 @@ function LojaDeIphonePage() {
                                 </div>
                               ))}
                             </div>
-                          </div>
-                          <div className="rounded-[18px] bg-surface p-4 shadow-soft">
-                            <p className="text-xs text-muted-foreground">Total programado</p>
-                            <p className="mt-1 text-2xl font-semibold text-foreground">
-                              {brl(loanFormProgrammedTotalPreview)}
-                            </p>
-                            <Input
-                              className="mt-3"
-                              placeholder="Juros mensal %"
-                              value={newLoan.jurosMensal}
-                              inputMode="decimal"
-                              onChange={(event) =>
-                                setNewLoan({ ...newLoan, jurosMensal: event.target.value })
-                              }
-                            />
                           </div>
                         </div>
                       </ModuleCard>
@@ -5782,6 +5787,65 @@ function DashboardDatePicker({
             Aplicar
           </Button>
         </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CompactDatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (date: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = parseDateInputValue(value || today);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-border/80 bg-surface px-4 text-left text-sm font-semibold text-foreground shadow-soft transition hover:border-primary/30 hover:bg-primary/5"
+        >
+          <span>{formatDateLong(value || today)}</span>
+          <CalendarDays className="size-4 text-primary" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-auto rounded-[24px] border-border/70 bg-surface p-3 shadow-[0_24px_80px_rgba(20,23,38,0.16)]"
+      >
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(date) => {
+            if (!date) return;
+            onChange(toDateInputValue(date));
+            setOpen(false);
+          }}
+          locale={ptBR}
+          className="rounded-[20px] p-2 [--cell-size:2.2rem]"
+          classNames={{
+            caption_label: "text-sm font-bold capitalize text-foreground",
+            month_caption: "flex h-10 items-center justify-center px-10",
+            button_previous:
+              "rounded-full border border-border/60 bg-surface-muted text-foreground hover:bg-primary hover:text-primary-foreground",
+            button_next:
+              "rounded-full border border-border/60 bg-surface-muted text-foreground hover:bg-primary hover:text-primary-foreground",
+            weekday: "text-[11px] font-bold uppercase text-muted-foreground",
+            day: "p-0 text-center",
+          }}
+          components={{
+            DayButton: ({ className, ...props }) => (
+              <CalendarDayButton
+                className={`rounded-full text-sm font-semibold transition hover:bg-primary/10 hover:text-primary ${className ?? ""}`}
+                {...props}
+              />
+            ),
+          }}
+        />
       </PopoverContent>
     </Popover>
   );
