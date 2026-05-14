@@ -132,6 +132,7 @@ type Part = {
 
 type ServiceOrder = {
   id: number;
+  productId?: string;
   cliente: string;
   whatsapp: string;
   modelo: string;
@@ -314,6 +315,12 @@ type LojaInventoryMeta =
       version: 1;
       kind: "part";
       data: Omit<Part, "id" | "productId">;
+    }
+  | {
+      app: "lojadeiphone";
+      version: 1;
+      kind: "service";
+      data: Omit<ServiceOrder, "id" | "productId">;
     };
 
 type ImeiCheckResult = {
@@ -1001,8 +1008,30 @@ function LojaDeIphonePage() {
   const [checkingImei, setCheckingImei] = useState(false);
   const [newService, setNewService] = useState({
     cliente: "",
+    whatsapp: "",
     modelo: "iPhone 11",
+    imei: "",
+    problema: "",
+    diagnostico: "",
     servico: "Troca de bateria",
+    peca: "",
+    custoPeca: "",
+    maoObra: "",
+    entrada: "",
+    formaPagamento: "A definir",
+    status: "Recebido" as ServiceStatus,
+    prazo: today,
+    garantia: "90",
+    observacoes: "",
+  });
+  const [phoneAction, setPhoneAction] = useState<"view" | "edit" | "sell" | null>(null);
+  const [selectedPhone, setSelectedPhone] = useState<Phone | null>(null);
+  const [phoneDraft, setPhoneDraft] = useState<Phone | null>(null);
+  const [phoneSaleDraft, setPhoneSaleDraft] = useState({
+    cliente: "",
+    valor: "",
+    formaPagamento: "Pix",
+    entrada: "",
   });
   const [newSale, setNewSale] = useState({
     cliente: "",
@@ -1053,16 +1082,19 @@ function LojaDeIphonePage() {
         const rows = (data ?? []) as InventoryProductRow[];
         const loadedPhones: Phone[] = [];
         const loadedParts: Part[] = [];
+        const loadedServices: ServiceOrder[] = [];
 
         rows.forEach((row) => {
           const parsed = parseInventoryProduct(row);
           if (!parsed) return;
           if (parsed.kind === "phone") loadedPhones.push(parsed.item);
           if (parsed.kind === "part") loadedParts.push(parsed.item);
+          if (parsed.kind === "service") loadedServices.push(parsed.item);
         });
 
         setPhones(loadedPhones);
         setParts(loadedParts);
+        setServices(loadedServices);
       })
       .finally(() => {
         if (activeRequest) setInventoryLoading(false);
@@ -1677,28 +1709,68 @@ function LojaDeIphonePage() {
     resetFilters("estoque");
   }
 
-  function addService() {
+  async function addService() {
+    if (!user) {
+      toast.error("Entre na sua conta para salvar no banco de dados");
+      return;
+    }
+    if (!newService.cliente.trim() || !newService.problema.trim()) {
+      toast.error("Informe cliente e problema relatado");
+      return;
+    }
+
     const service: ServiceOrder = {
       id: Date.now(),
-      cliente: newService.cliente || "Cliente balcão",
-      whatsapp: "",
+      cliente: newService.cliente.trim(),
+      whatsapp: newService.whatsapp.trim(),
       modelo: newService.modelo,
-      imei: "",
-      problema: "Aguardando diagnóstico.",
-      diagnostico: "Pendente",
+      imei: newService.imei.trim(),
+      problema: newService.problema.trim(),
+      diagnostico: newService.diagnostico.trim() || "Pendente",
       servico: newService.servico,
+      peca: newService.peca.trim(),
+      custoPeca: moneyToNumber(newService.custoPeca),
+      maoObra: moneyToNumber(newService.maoObra),
+      entrada: moneyToNumber(newService.entrada),
+      formaPagamento: newService.formaPagamento,
+      status: newService.status,
+      prazo: newService.prazo || today,
+      garantia: Math.max(0, Number(newService.garantia) || 0),
+      observacoes: newService.observacoes.trim(),
+    };
+    const savedService = await saveLojaInventoryProduct({
+      userId: user.id,
+      kind: "service",
+      name: `OS ${service.cliente} - ${service.modelo}`,
+      sku: service.imei || `OS-${Date.now().toString().slice(-6)}`,
+      salePrice: service.custoPeca + service.maoObra,
+      quantity: 0,
+      minimum: 0,
+      status: service.status,
+      data: service,
+    });
+    if (!savedService) return;
+
+    setServices((items) => [savedService as ServiceOrder, ...items]);
+    setNewService({
+      cliente: "",
+      whatsapp: "",
+      modelo: "iPhone 11",
+      imei: "",
+      problema: "",
+      diagnostico: "",
+      servico: "Troca de bateria",
       peca: "",
-      custoPeca: 0,
-      maoObra: 0,
-      entrada: 0,
+      custoPeca: "",
+      maoObra: "",
+      entrada: "",
       formaPagamento: "A definir",
       status: "Recebido",
       prazo: today,
-      garantia: 90,
-      observacoes: "Ordem criada pelo cadastro rápido.",
-    };
-    setServices((items) => [service, ...items]);
-    toast.success("Ordem de serviço criada");
+      garantia: "90",
+      observacoes: "",
+    });
+    toast.success("Ordem de servi?o criada");
   }
 
   function createClientFromDraft(draft: {
@@ -2114,6 +2186,76 @@ function LojaDeIphonePage() {
     toast.success("Item excluido");
   }
 
+  function openPhoneAction(action: "view" | "edit" | "sell", phone: Phone) {
+    setSelectedPhone(phone);
+    setPhoneAction(action);
+    setPhoneDraft({ ...phone });
+    setPhoneSaleDraft({
+      cliente: "",
+      valor: String(phone.precoVenda),
+      formaPagamento: "Pix",
+      entrada: String(phone.precoVenda),
+    });
+  }
+
+  async function savePhoneEdit() {
+    if (!phoneDraft) return;
+    const updated = await updateLojaInventoryProduct(phoneDraft, "phone");
+    if (!updated) return;
+    setPhones((items) =>
+      items.map((item) => (item.id === phoneDraft.id ? (updated as Phone) : item)),
+    );
+    setSelectedPhone(updated as Phone);
+    setPhoneDraft(updated as Phone);
+    setPhoneAction(null);
+    toast.success("Aparelho atualizado");
+  }
+
+  async function sellPhone() {
+    if (!selectedPhone) return;
+    const salePrice = moneyToNumber(phoneSaleDraft.valor);
+    if (!phoneSaleDraft.cliente.trim() || salePrice <= 0) {
+      toast.error("Informe cliente e valor da venda");
+      return;
+    }
+
+    const soldPhone: Phone = {
+      ...selectedPhone,
+      precoVenda: salePrice,
+      status: "Vendido",
+      observacoes:
+        `${selectedPhone.observacoes || ""}\nVendido para ${phoneSaleDraft.cliente.trim()} em ${today}.`.trim(),
+    };
+    const updated = await updateLojaInventoryProduct(soldPhone, "phone");
+    if (!updated) return;
+
+    setPhones((items) =>
+      items.map((item) => (item.id === selectedPhone.id ? (updated as Phone) : item)),
+    );
+    setSales((items) => [
+      {
+        id: Date.now(),
+        cliente: phoneSaleDraft.cliente.trim(),
+        tipo: "Celular",
+        item: `${soldPhone.modelo} ${soldPhone.capacidade} ${soldPhone.cor}`.trim(),
+        quantidade: 1,
+        unitario: salePrice,
+        desconto: 0,
+        pagamento: phoneSaleDraft.formaPagamento,
+        entrada: moneyToNumber(phoneSaleDraft.entrada) || salePrice,
+        parcelas: 1,
+        vencimento: today,
+        status: "Pago",
+        lucro: salePrice - soldPhone.custoCompra - soldPhone.custoManutencao,
+        modalidade: "avista",
+      },
+      ...items,
+    ]);
+    setPhoneAction(null);
+    setSelectedPhone(null);
+    toast.success("Celular marcado como vendido");
+  }
+
   function markChargePaid(id: number, installmentId?: number | null) {
     setSales((items) =>
       items.map((item) => {
@@ -2321,37 +2463,62 @@ function LojaDeIphonePage() {
             )}
 
             {active === "celulares" && (
-              <DataCard>
-                <ResponsiveTable
-                  columns={[
-                    "Modelo",
-                    "IMEI",
-                    "Bateria",
-                    "Originais",
-                    "Custos",
-                    "Venda",
-                    "Status",
-                    "Ações",
-                  ]}
-                  rows={filteredPhones.map((phone) => [
-                    <ItemTitle
-                      key="modelo"
-                      title={`${phone.modelo} ${phone.capacidade} ${phone.cor}`}
-                      subtitle={`${phone.estado} • ${phone.bloqueio}`}
-                    />,
-                    phone.imei,
-                    `${phone.bateria}%`,
-                    `Face ID ${phone.faceId} • Tela ${phone.telaOriginal}`,
-                    `${brl(phone.custoCompra + phone.custoManutencao)}`,
-                    brl(phone.precoVenda),
-                    <StatusPill key="status" status={phone.status} />,
-                    <Actions
-                      key="actions"
-                      onDelete={() => void removeInventoryById(setPhones, phone)}
-                    />,
-                  ])}
-                />
-              </DataCard>
+              <>
+                <DataCard>
+                  <ResponsiveTable
+                    columns={[
+                      "Modelo",
+                      "IMEI",
+                      "Bateria",
+                      "Originais",
+                      "Custos",
+                      "Venda",
+                      "Status",
+                      "Ações",
+                    ]}
+                    rows={filteredPhones.map((phone) => [
+                      <ItemTitle
+                        key="modelo"
+                        title={`${phone.modelo} ${phone.capacidade} ${phone.cor}`}
+                        subtitle={`${phone.estado} • ${phone.bloqueio}`}
+                      />,
+                      phone.imei,
+                      `${phone.bateria}%`,
+                      `Face ID ${phone.faceId} • Tela ${phone.telaOriginal}`,
+                      `${brl(phone.custoCompra + phone.custoManutencao)}`,
+                      brl(phone.precoVenda),
+                      <StatusPill key="status" status={phone.status} />,
+                      <Actions
+                        key="actions"
+                        onView={() => openPhoneAction("view", phone)}
+                        onEdit={() => openPhoneAction("edit", phone)}
+                        onSell={() => openPhoneAction("sell", phone)}
+                        onDelete={() => void removeInventoryById(setPhones, phone)}
+                      />,
+                    ])}
+                  />
+                </DataCard>
+                {phoneAction && selectedPhone && (
+                  <PhoneActionPanel
+                    mode={phoneAction}
+                    phone={selectedPhone}
+                    draft={phoneDraft}
+                    saleDraft={phoneSaleDraft}
+                    onDraftChange={(patch) =>
+                      setPhoneDraft((current) => (current ? { ...current, ...patch } : current))
+                    }
+                    onSaleChange={(patch) =>
+                      setPhoneSaleDraft((current) => ({ ...current, ...patch }))
+                    }
+                    onClose={() => {
+                      setPhoneAction(null);
+                      setSelectedPhone(null);
+                    }}
+                    onSave={savePhoneEdit}
+                    onSell={sellPhone}
+                  />
+                )}
+              </>
             )}
 
             {active === "pecas" && (
@@ -2398,7 +2565,7 @@ function LojaDeIphonePage() {
                   icon={Wrench}
                   action={<Button onClick={addService}>Criar OS</Button>}
                 >
-                  <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr]">
+                  <div className="grid gap-3 lg:grid-cols-3">
                     <Input
                       placeholder="Cliente"
                       value={newService.cliente}
@@ -2406,15 +2573,109 @@ function LojaDeIphonePage() {
                         setNewService({ ...newService, cliente: event.target.value })
                       }
                     />
+                    <Input
+                      placeholder="WhatsApp"
+                      value={newService.whatsapp}
+                      onChange={(event) =>
+                        setNewService({ ...newService, whatsapp: event.target.value })
+                      }
+                    />
                     <SelectLike
                       value={newService.modelo}
                       onChange={(value) => setNewService({ ...newService, modelo: value })}
                       options={iphoneModels}
                     />
+                    <Input
+                      placeholder="IMEI ou serial"
+                      value={newService.imei}
+                      onChange={(event) =>
+                        setNewService({ ...newService, imei: event.target.value })
+                      }
+                    />
                     <SelectLike
                       value={newService.servico}
                       onChange={(value) => setNewService({ ...newService, servico: value })}
                       options={serviceTypes}
+                    />
+                    <Input
+                      placeholder="Peça utilizada"
+                      value={newService.peca}
+                      onChange={(event) =>
+                        setNewService({ ...newService, peca: event.target.value })
+                      }
+                    />
+                    <Input
+                      placeholder="Custo da peça"
+                      value={newService.custoPeca}
+                      onChange={(event) =>
+                        setNewService({ ...newService, custoPeca: event.target.value })
+                      }
+                    />
+                    <Input
+                      placeholder="Mão de obra"
+                      value={newService.maoObra}
+                      onChange={(event) =>
+                        setNewService({ ...newService, maoObra: event.target.value })
+                      }
+                    />
+                    <Input
+                      placeholder="Entrada paga"
+                      value={newService.entrada}
+                      onChange={(event) =>
+                        setNewService({ ...newService, entrada: event.target.value })
+                      }
+                    />
+                    <Input
+                      type="date"
+                      value={newService.prazo}
+                      onChange={(event) =>
+                        setNewService({ ...newService, prazo: event.target.value })
+                      }
+                    />
+                    <Input
+                      placeholder="Garantia em dias"
+                      value={newService.garantia}
+                      onChange={(event) =>
+                        setNewService({ ...newService, garantia: event.target.value })
+                      }
+                    />
+                    <SelectLike
+                      value={newService.status}
+                      onChange={(value) =>
+                        setNewService({ ...newService, status: value as ServiceStatus })
+                      }
+                      options={[
+                        "Recebido",
+                        "Em diagnóstico",
+                        "Aguardando peça",
+                        "Em manutenção",
+                        "Pronto",
+                        "Entregue",
+                        "Cancelado",
+                      ]}
+                    />
+                  </div>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    <Textarea
+                      placeholder="Problema relatado pelo cliente"
+                      value={newService.problema}
+                      onChange={(event) =>
+                        setNewService({ ...newService, problema: event.target.value })
+                      }
+                      className="min-h-[96px] rounded-2xl bg-surface-muted"
+                    />
+                    <Textarea
+                      placeholder="Diagnóstico, observações internas e combinado"
+                      value={`${newService.diagnostico}${newService.observacoes ? `\n${newService.observacoes}` : ""}`}
+                      onChange={(event) => {
+                        const [diagnostico = "", ...observacoes] = event.target.value.split("\n");
+                        setNewService({
+                          ...newService,
+                          diagnostico,
+                          observacoes: observacoes.join("\n"),
+                        });
+                      }}
+                      className="min-h-[96px] rounded-2xl bg-surface-muted"
                     />
                   </div>
                 </ModuleCard>
@@ -2454,7 +2715,7 @@ function LojaDeIphonePage() {
                         <StatusPill key="status" status={service.status} />,
                         <Actions
                           key="actions"
-                          onDelete={() => removeById(setServices, service.id)}
+                          onDelete={() => void removeInventoryById(setServices, service)}
                         />,
                       ];
                     })}
@@ -4453,19 +4714,168 @@ function StockPill({ part }: { part: Part }) {
   return <StatusPill status={status} />;
 }
 
-function Actions({ onDelete }: { onDelete: () => void }) {
+function PhoneActionPanel({
+  mode,
+  phone,
+  draft,
+  saleDraft,
+  onDraftChange,
+  onSaleChange,
+  onClose,
+  onSave,
+  onSell,
+}: {
+  mode: "view" | "edit" | "sell";
+  phone: Phone;
+  draft: Phone | null;
+  saleDraft: { cliente: string; valor: string; formaPagamento: string; entrada: string };
+  onDraftChange: (patch: Partial<Phone>) => void;
+  onSaleChange: (patch: Partial<typeof saleDraft>) => void;
+  onClose: () => void;
+  onSave: () => void | Promise<void>;
+  onSell: () => void | Promise<void>;
+}) {
+  const current = draft ?? phone;
+  return (
+    <ModuleCard
+      title={
+        mode === "view"
+          ? "Detalhes do aparelho"
+          : mode === "edit"
+            ? "Editar aparelho"
+            : "Registrar venda do aparelho"
+      }
+      icon={mode === "sell" ? BadgeDollarSign : Smartphone}
+      action={
+        <Button variant="outline" onClick={onClose}>
+          Fechar
+        </Button>
+      }
+    >
+      {mode === "view" && (
+        <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
+          <Field label="Modelo" value={`${phone.modelo} ${phone.capacidade} ${phone.cor}`} />
+          <Field label="IMEI" value={phone.imei} />
+          <Field label="Serial" value={phone.serial} />
+          <Field label="Bateria" value={`${phone.bateria}%`} />
+          <Field label="Custo total" value={brl(phone.custoCompra + phone.custoManutencao)} />
+          <Field label="Venda" value={brl(phone.precoVenda)} />
+          <Field label="Status" value={phone.status} />
+          <Field label="Face ID" value={phone.faceId} />
+          <Field label="Tela original" value={phone.telaOriginal} />
+        </div>
+      )}
+
+      {mode === "edit" && (
+        <div className="grid gap-3 lg:grid-cols-3">
+          <Input
+            value={current.modelo}
+            onChange={(event) => onDraftChange({ modelo: event.target.value })}
+          />
+          <Input
+            value={current.capacidade}
+            onChange={(event) => onDraftChange({ capacidade: event.target.value })}
+          />
+          <Input
+            value={current.cor}
+            onChange={(event) => onDraftChange({ cor: event.target.value })}
+          />
+          <Input
+            value={current.imei}
+            onChange={(event) => onDraftChange({ imei: event.target.value })}
+          />
+          <Input
+            value={current.serial}
+            onChange={(event) => onDraftChange({ serial: event.target.value })}
+          />
+          <Input
+            value={String(current.bateria)}
+            onChange={(event) =>
+              onDraftChange({ bateria: Math.max(0, Number(event.target.value) || 0) })
+            }
+          />
+          <Input
+            value={String(current.custoCompra)}
+            onChange={(event) => onDraftChange({ custoCompra: moneyToNumber(event.target.value) })}
+          />
+          <Input
+            value={String(current.precoVenda)}
+            onChange={(event) => onDraftChange({ precoVenda: moneyToNumber(event.target.value) })}
+          />
+          <SelectLike
+            value={current.status}
+            onChange={(value) => onDraftChange({ status: value as PhoneStatus })}
+            options={["Disponível", "Vendido", "Reservado", "Em manutenção", "Fiado", "Consignado"]}
+          />
+          <Textarea
+            value={current.observacoes}
+            onChange={(event) => onDraftChange({ observacoes: event.target.value })}
+            className="min-h-[90px] rounded-2xl bg-surface-muted lg:col-span-3"
+          />
+          <Button onClick={onSave} className="rounded-full lg:col-span-3">
+            Salvar edição
+          </Button>
+        </div>
+      )}
+
+      {mode === "sell" && (
+        <div className="grid gap-3 lg:grid-cols-4">
+          <Input
+            placeholder="Cliente comprador"
+            value={saleDraft.cliente}
+            onChange={(event) => onSaleChange({ cliente: event.target.value })}
+          />
+          <Input
+            placeholder="Valor vendido"
+            value={saleDraft.valor}
+            onChange={(event) => onSaleChange({ valor: event.target.value })}
+          />
+          <Input
+            placeholder="Entrada recebida"
+            value={saleDraft.entrada}
+            onChange={(event) => onSaleChange({ entrada: event.target.value })}
+          />
+          <SelectLike
+            value={saleDraft.formaPagamento}
+            onChange={(value) => onSaleChange({ formaPagamento: value })}
+            options={["Pix", "Dinheiro", "Cartão", "Fiado", "Entrada + parcelas"]}
+          />
+          <Button onClick={onSell} className="rounded-full lg:col-span-4">
+            Confirmar venda e baixar do estoque
+          </Button>
+        </div>
+      )}
+    </ModuleCard>
+  );
+}
+
+function Actions({
+  onView,
+  onEdit,
+  onSell,
+  onDelete,
+}: {
+  onView?: () => void;
+  onEdit?: () => void;
+  onSell?: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
-      <ActionButton icon={Eye} label="Ver" onClick={() => toast.success("Visualização aberta")} />
+      <ActionButton
+        icon={Eye}
+        label="Ver"
+        onClick={onView ?? (() => toast.success("Visualizacao aberta"))}
+      />
       <ActionButton
         icon={PenLine}
         label="Editar"
-        onClick={() => toast.success("Edição pronta para conectar")}
+        onClick={onEdit ?? (() => toast.success("Edicao pronta para conectar"))}
       />
       <ActionButton
         icon={BadgeDollarSign}
         label="Vender"
-        onClick={() => toast.success("Venda iniciada")}
+        onClick={onSell ?? (() => toast.success("Venda iniciada"))}
       />
       <ActionButton icon={Trash2} label="Excluir" onClick={onDelete} danger />
     </div>
@@ -4576,7 +4986,7 @@ function numericIdFromString(value: string) {
 
 function inventoryMeta<K extends LojaInventoryMeta["kind"]>(
   kind: K,
-  data: K extends "phone" ? Phone : Part,
+  data: K extends "phone" ? Phone : K extends "part" ? Part : ServiceOrder,
 ): LojaInventoryMeta {
   const { id: _id, productId: _productId, ...cleanData } = data;
   return {
@@ -4607,18 +5017,32 @@ function parseInventoryProduct(row: InventoryProductRow) {
       };
     }
 
-    return {
-      kind: "part" as const,
-      item: {
-        ...meta.data,
-        id: numericIdFromString(row.id),
-        productId: row.id,
-        preco: Number(row.preco_venda) || meta.data.preco,
-        quantidade: Number(row.quantidade) || meta.data.quantidade,
-        minimo: Number(row.estoque_minimo) || meta.data.minimo,
-        status: (row.status as Part["status"]) || meta.data.status,
-      },
-    };
+    if (meta.kind === "part") {
+      return {
+        kind: "part" as const,
+        item: {
+          ...meta.data,
+          id: numericIdFromString(row.id),
+          productId: row.id,
+          preco: Number(row.preco_venda) || meta.data.preco,
+          quantidade: Number(row.quantidade) || meta.data.quantidade,
+          minimo: Number(row.estoque_minimo) || meta.data.minimo,
+          status: (row.status as Part["status"]) || meta.data.status,
+        },
+      };
+    }
+
+    if (meta.kind === "service") {
+      return {
+        kind: "service" as const,
+        item: {
+          ...meta.data,
+          id: numericIdFromString(row.id),
+          productId: row.id,
+          status: (row.status as ServiceStatus) || meta.data.status,
+        },
+      };
+    }
   } catch {
     return null;
   }
@@ -4636,16 +5060,16 @@ async function saveLojaInventoryProduct({
   data,
 }: {
   userId: string;
-  kind: "phone" | "part";
+  kind: "phone" | "part" | "service";
   name: string;
   sku: string;
   salePrice: number;
   quantity: number;
   minimum: number;
   status: string;
-  data: Phone | Part;
+  data: Phone | Part | ServiceOrder;
 }) {
-  const meta = inventoryMeta(kind, data as Phone & Part);
+  const meta = inventoryMeta(kind, data as Phone & Part & ServiceOrder);
   const { data: saved, error } = await supabase
     .from("products")
     .insert({
@@ -4668,6 +5092,60 @@ async function saveLojaInventoryProduct({
 
   const parsed = parseInventoryProduct(saved as InventoryProductRow);
   return parsed?.item ?? null;
+}
+
+async function updateLojaInventoryProduct(
+  item: Phone | Part | ServiceOrder,
+  kind: "phone" | "part" | "service",
+) {
+  if (!item.productId) {
+    toast.error("Este item antigo nao tem vinculo com o banco. Cadastre novamente para editar.");
+    return null;
+  }
+
+  const name =
+    kind === "phone"
+      ? `${(item as Phone).modelo} ${(item as Phone).capacidade} ${(item as Phone).cor}`.trim()
+      : kind === "part"
+        ? `${(item as Part).tipo} ${(item as Part).modelo}`.trim()
+        : `OS ${(item as ServiceOrder).cliente} - ${(item as ServiceOrder).modelo}`;
+  const price =
+    kind === "phone"
+      ? (item as Phone).precoVenda
+      : kind === "part"
+        ? (item as Part).preco
+        : (item as ServiceOrder).custoPeca + (item as ServiceOrder).maoObra;
+  const quantity = kind === "part" ? (item as Part).quantidade : kind === "phone" ? 1 : 0;
+  const minimum = kind === "part" ? (item as Part).minimo : 0;
+  const sku =
+    kind === "phone"
+      ? (item as Phone).imei || (item as Phone).serial
+      : kind === "part"
+        ? (item as Part).sku
+        : (item as ServiceOrder).imei || `OS-${item.id}`;
+
+  const meta = inventoryMeta(kind, item as Phone & Part & ServiceOrder);
+  const { data: saved, error } = await supabase
+    .from("products")
+    .update({
+      nome: name,
+      sku,
+      preco_venda: price,
+      quantidade: quantity,
+      estoque_minimo: minimum,
+      status: item.status,
+      observacoes: JSON.stringify(meta),
+    })
+    .eq("id", item.productId)
+    .select("id,nome,sku,preco_venda,quantidade,estoque_minimo,status,observacoes")
+    .maybeSingle();
+
+  if (error || !saved) {
+    toast.error("Nao consegui atualizar o item no banco da sua conta");
+    return null;
+  }
+
+  return parseInventoryProduct(saved as InventoryProductRow)?.item ?? null;
 }
 
 function dateToISO(date: Date) {
