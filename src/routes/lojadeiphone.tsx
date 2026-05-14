@@ -1313,12 +1313,17 @@ function LojaDeIphonePage() {
           total: loanFormProgrammedTotalPreview,
         })
       : [];
+  const canShowStockProductForm = ["celulares", "pecas", "estoque"].includes(active);
 
   function resetFilters(tab: TabId) {
     setActive(tab);
     setQuery("");
     setStatusFilter("Todos");
     setCategoryFilter("Todos");
+    setFormModal(null);
+    if (!["celulares", "pecas", "estoque"].includes(tab)) {
+      setStockProductOpen(false);
+    }
   }
 
   function focusSection(sectionId: string) {
@@ -2436,7 +2441,10 @@ function LojaDeIphonePage() {
                 />
               )}
 
-            <Dialog open={stockProductOpen} onOpenChange={setStockProductOpen}>
+            <Dialog
+              open={stockProductOpen && canShowStockProductForm}
+              onOpenChange={(open) => setStockProductOpen(open)}
+            >
               <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1180px] sm:rounded-2xl">
                 <StockProductFormCard
                   id="iphone-stock-product-form"
