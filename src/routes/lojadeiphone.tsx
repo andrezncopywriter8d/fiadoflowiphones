@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { AppLogo } from "@/components/layout/AppLogo";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -1000,6 +1001,7 @@ function LojaDeIphonePage() {
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
   const [stockProduct, setStockProduct] = useState<StockProductForm>(emptyStockProductForm);
   const [stockProductOpen, setStockProductOpen] = useState(false);
+  const [formModal, setFormModal] = useState<null | "service" | "client" | "sale" | "loan">(null);
   const [imeiQuery, setImeiQuery] = useState("");
   const [imeiApiKey, setImeiApiKey] = useState(() =>
     typeof window === "undefined" ? "" : localStorage.getItem("fiado-imei-api-key") || "",
@@ -1345,7 +1347,6 @@ function LojaDeIphonePage() {
       disponibilidade: emptyStockProductForm.disponibilidade,
     });
     setStockProductOpen(true);
-    window.requestAnimationFrame(() => focusSection("iphone-stock-product-form"));
   }
 
   function startPrimaryFlow() {
@@ -1368,25 +1369,25 @@ function LojaDeIphonePage() {
     }
 
     if (active === "servicos") {
-      focusSection("iphone-service-form");
+      setFormModal("service");
       toast.success("Ordem de serviço pronta para preencher");
       return;
     }
 
     if (active === "clientes") {
-      focusSection("iphone-client-form");
+      setFormModal("client");
       toast.success("Cadastro de cliente pronto para preencher");
       return;
     }
 
     if (active === "vendas") {
-      focusSection("iphone-sale-form");
+      setFormModal("sale");
       toast.success("Venda pronta para preencher");
       return;
     }
 
     if (active === "emprestimos") {
-      focusSection("iphone-loan-form");
+      setFormModal("loan");
       toast.success("Registro de emprestimo pronto para preencher");
       return;
     }
@@ -1770,7 +1771,8 @@ function LojaDeIphonePage() {
       garantia: "90",
       observacoes: "",
     });
-    toast.success("Ordem de servi?o criada");
+    setFormModal(null);
+    toast.success("Ordem de serviço criada");
   }
 
   function createClientFromDraft(draft: {
@@ -1824,6 +1826,7 @@ function LojaDeIphonePage() {
       endereco: "",
       observacoes: "",
     });
+    setFormModal(null);
     toast.success("Cliente cadastrado");
   }
 
@@ -2012,6 +2015,7 @@ function LojaDeIphonePage() {
         ? "Venda por empréstimo programada com cobranças"
         : "Venda registrada e estoque atualizado",
     );
+    setFormModal(null);
   }
 
   function registerLoan() {
@@ -2113,6 +2117,7 @@ function LojaDeIphonePage() {
       diaCobranca: "20",
       primeiraParcela: nextDueDate(today, 20),
     });
+    setFormModal(null);
     toast.success("Emprestimo registrado e cobrancas programadas");
   }
 
@@ -2431,16 +2436,18 @@ function LojaDeIphonePage() {
                 />
               )}
 
-            {stockProductOpen && (
-              <StockProductFormCard
-                id="iphone-stock-product-form"
-                form={stockProduct}
-                onChange={(patch) => setStockProduct((current) => ({ ...current, ...patch }))}
-                onSave={saveStockProduct}
-                onReset={() => setStockProduct(emptyStockProductForm)}
-                onClose={() => setStockProductOpen(false)}
-              />
-            )}
+            <Dialog open={stockProductOpen} onOpenChange={setStockProductOpen}>
+              <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1180px] sm:rounded-2xl">
+                <StockProductFormCard
+                  id="iphone-stock-product-form"
+                  form={stockProduct}
+                  onChange={(patch) => setStockProduct((current) => ({ ...current, ...patch }))}
+                  onSave={saveStockProduct}
+                  onReset={() => setStockProduct(emptyStockProductForm)}
+                  onClose={() => setStockProductOpen(false)}
+                />
+              </DialogContent>
+            </Dialog>
 
             {active === "celulares" && (
               <>
@@ -2559,126 +2566,133 @@ function LojaDeIphonePage() {
 
             {active === "servicos" && (
               <>
-                <ModuleCard
-                  id="iphone-service-form"
-                  title="Nova ordem de serviço"
-                  icon={Wrench}
-                  action={<Button onClick={addService}>Criar OS</Button>}
-                >
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    <Input
-                      placeholder="Cliente"
-                      value={newService.cliente}
-                      onChange={(event) =>
-                        setNewService({ ...newService, cliente: event.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="WhatsApp"
-                      value={newService.whatsapp}
-                      onChange={(event) =>
-                        setNewService({ ...newService, whatsapp: event.target.value })
-                      }
-                    />
-                    <SelectLike
-                      value={newService.modelo}
-                      onChange={(value) => setNewService({ ...newService, modelo: value })}
-                      options={iphoneModels}
-                    />
-                    <Input
-                      placeholder="IMEI ou serial"
-                      value={newService.imei}
-                      onChange={(event) =>
-                        setNewService({ ...newService, imei: event.target.value })
-                      }
-                    />
-                    <SelectLike
-                      value={newService.servico}
-                      onChange={(value) => setNewService({ ...newService, servico: value })}
-                      options={serviceTypes}
-                    />
-                    <Input
-                      placeholder="Peça utilizada"
-                      value={newService.peca}
-                      onChange={(event) =>
-                        setNewService({ ...newService, peca: event.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="Custo da peça"
-                      value={newService.custoPeca}
-                      onChange={(event) =>
-                        setNewService({ ...newService, custoPeca: event.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="Mão de obra"
-                      value={newService.maoObra}
-                      onChange={(event) =>
-                        setNewService({ ...newService, maoObra: event.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="Entrada paga"
-                      value={newService.entrada}
-                      onChange={(event) =>
-                        setNewService({ ...newService, entrada: event.target.value })
-                      }
-                    />
-                    <Input
-                      type="date"
-                      value={newService.prazo}
-                      onChange={(event) =>
-                        setNewService({ ...newService, prazo: event.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="Garantia em dias"
-                      value={newService.garantia}
-                      onChange={(event) =>
-                        setNewService({ ...newService, garantia: event.target.value })
-                      }
-                    />
-                    <SelectLike
-                      value={newService.status}
-                      onChange={(value) =>
-                        setNewService({ ...newService, status: value as ServiceStatus })
-                      }
-                      options={[
-                        "Recebido",
-                        "Em diagnóstico",
-                        "Aguardando peça",
-                        "Em manutenção",
-                        "Pronto",
-                        "Entregue",
-                        "Cancelado",
-                      ]}
-                    />
-                  </div>
-                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                    <Textarea
-                      placeholder="Problema relatado pelo cliente"
-                      value={newService.problema}
-                      onChange={(event) =>
-                        setNewService({ ...newService, problema: event.target.value })
-                      }
-                      className="min-h-[96px] rounded-2xl bg-surface-muted"
-                    />
-                    <Textarea
-                      placeholder="Diagnóstico, observações internas e combinado"
-                      value={`${newService.diagnostico}${newService.observacoes ? `\n${newService.observacoes}` : ""}`}
-                      onChange={(event) => {
-                        const [diagnostico = "", ...observacoes] = event.target.value.split("\n");
-                        setNewService({
-                          ...newService,
-                          diagnostico,
-                          observacoes: observacoes.join("\n"),
-                        });
-                      }}
-                      className="min-h-[96px] rounded-2xl bg-surface-muted"
-                    />
-                  </div>
-                </ModuleCard>
+                {formModal === "service" && (
+                  <Dialog open onOpenChange={(open) => !open && setFormModal(null)}>
+                    <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1120px] sm:rounded-2xl">
+                      <ModuleCard
+                        id="iphone-service-form"
+                        title="Nova ordem de serviço"
+                        icon={Wrench}
+                        action={<Button onClick={addService}>Criar OS</Button>}
+                      >
+                        <div className="grid gap-3 lg:grid-cols-3">
+                          <Input
+                            placeholder="Cliente"
+                            value={newService.cliente}
+                            onChange={(event) =>
+                              setNewService({ ...newService, cliente: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="WhatsApp"
+                            value={newService.whatsapp}
+                            onChange={(event) =>
+                              setNewService({ ...newService, whatsapp: event.target.value })
+                            }
+                          />
+                          <SelectLike
+                            value={newService.modelo}
+                            onChange={(value) => setNewService({ ...newService, modelo: value })}
+                            options={iphoneModels}
+                          />
+                          <Input
+                            placeholder="IMEI ou serial"
+                            value={newService.imei}
+                            onChange={(event) =>
+                              setNewService({ ...newService, imei: event.target.value })
+                            }
+                          />
+                          <SelectLike
+                            value={newService.servico}
+                            onChange={(value) => setNewService({ ...newService, servico: value })}
+                            options={serviceTypes}
+                          />
+                          <Input
+                            placeholder="Peça utilizada"
+                            value={newService.peca}
+                            onChange={(event) =>
+                              setNewService({ ...newService, peca: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Custo da peça"
+                            value={newService.custoPeca}
+                            onChange={(event) =>
+                              setNewService({ ...newService, custoPeca: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Mão de obra"
+                            value={newService.maoObra}
+                            onChange={(event) =>
+                              setNewService({ ...newService, maoObra: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Entrada paga"
+                            value={newService.entrada}
+                            onChange={(event) =>
+                              setNewService({ ...newService, entrada: event.target.value })
+                            }
+                          />
+                          <Input
+                            type="date"
+                            value={newService.prazo}
+                            onChange={(event) =>
+                              setNewService({ ...newService, prazo: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Garantia em dias"
+                            value={newService.garantia}
+                            onChange={(event) =>
+                              setNewService({ ...newService, garantia: event.target.value })
+                            }
+                          />
+                          <SelectLike
+                            value={newService.status}
+                            onChange={(value) =>
+                              setNewService({ ...newService, status: value as ServiceStatus })
+                            }
+                            options={[
+                              "Recebido",
+                              "Em diagnóstico",
+                              "Aguardando peça",
+                              "Em manutenção",
+                              "Pronto",
+                              "Entregue",
+                              "Cancelado",
+                            ]}
+                          />
+                        </div>
+                        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                          <Textarea
+                            placeholder="Problema relatado pelo cliente"
+                            value={newService.problema}
+                            onChange={(event) =>
+                              setNewService({ ...newService, problema: event.target.value })
+                            }
+                            className="min-h-[96px] rounded-2xl bg-surface-muted"
+                          />
+                          <Textarea
+                            placeholder="Diagnóstico, observações internas e combinado"
+                            value={`${newService.diagnostico}${newService.observacoes ? `\n${newService.observacoes}` : ""}`}
+                            onChange={(event) => {
+                              const [diagnostico = "", ...observacoes] =
+                                event.target.value.split("\n");
+                              setNewService({
+                                ...newService,
+                                diagnostico,
+                                observacoes: observacoes.join("\n"),
+                              });
+                            }}
+                            className="min-h-[96px] rounded-2xl bg-surface-muted"
+                          />
+                        </div>
+                      </ModuleCard>
+                    </DialogContent>
+                  </Dialog>
+                )}
                 <DataCard>
                   <ResponsiveTable
                     columns={[
@@ -2726,91 +2740,99 @@ function LojaDeIphonePage() {
 
             {active === "clientes" && (
               <>
-                <ModuleCard
-                  id="iphone-client-form"
-                  title="Cadastrar clientes"
-                  icon={Users}
-                  action={<Button onClick={addClient}>Cadastrar cliente</Button>}
-                >
-                  <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
-                    {[
-                      { id: "B2C", label: "B2C venda final" },
-                      { id: "B2B", label: "B2B revenda" },
-                    ].map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() =>
-                          setNewClient({ ...newClient, tipo: option.id as Client["tipo"] })
-                        }
-                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
-                          newClient.tipo === option.id
-                            ? "bg-primary text-primary-foreground shadow-soft"
-                            : "bg-surface text-muted-foreground hover:text-foreground"
-                        }`}
+                {formModal === "client" && (
+                  <Dialog open onOpenChange={(open) => !open && setFormModal(null)}>
+                    <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1120px] sm:rounded-2xl">
+                      <ModuleCard
+                        id="iphone-client-form"
+                        title="Cadastrar clientes"
+                        icon={Users}
+                        action={<Button onClick={addClient}>Cadastrar cliente</Button>}
                       >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid gap-3 lg:grid-cols-[1.2fr_150px_1fr_1fr]">
-                    <Input
-                      placeholder="Nome ou empresa"
-                      value={newClient.nome}
-                      onChange={(event) => setNewClient({ ...newClient, nome: event.target.value })}
-                    />
-                    <Input
-                      placeholder="WhatsApp"
-                      value={newClient.whatsapp}
-                      onChange={(event) =>
-                        setNewClient({ ...newClient, whatsapp: event.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="CPF/CNPJ opcional"
-                      value={newClient.documento}
-                      onChange={(event) =>
-                        setNewClient({ ...newClient, documento: event.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="Endereco opcional"
-                      value={newClient.endereco}
-                      onChange={(event) =>
-                        setNewClient({ ...newClient, endereco: event.target.value })
-                      }
-                    />
-                  </div>
-                  <Textarea
-                    className="mt-3 min-h-20 rounded-[22px]"
-                    placeholder="Observacoes, perfil de compra, limite, modelos de interesse..."
-                    value={newClient.observacoes}
-                    onChange={(event) =>
-                      setNewClient({ ...newClient, observacoes: event.target.value })
-                    }
-                  />
-                  <div className="mt-4 rounded-[22px] border border-border bg-surface-muted p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">
-                          Importar lista de clientes
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Cole um por linha. Formato: nome; whatsapp; cpf/cnpj; observacao.
-                        </p>
-                      </div>
-                      <Button type="button" variant="outline" onClick={importClientList}>
-                        Importar lista
-                      </Button>
-                    </div>
-                    <Textarea
-                      className="mt-3 min-h-24 rounded-[18px] bg-surface"
-                      placeholder={`Joao Silva; 11999999999; 000.000.000-00; cliente final\nLoja Alfa; 11988888888; 00.000.000/0001-00; revenda`}
-                      value={clientListText}
-                      onChange={(event) => setClientListText(event.target.value)}
-                    />
-                  </div>
-                </ModuleCard>
+                        <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
+                          {[
+                            { id: "B2C", label: "B2C venda final" },
+                            { id: "B2B", label: "B2B revenda" },
+                          ].map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() =>
+                                setNewClient({ ...newClient, tipo: option.id as Client["tipo"] })
+                              }
+                              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                                newClient.tipo === option.id
+                                  ? "bg-primary text-primary-foreground shadow-soft"
+                                  : "bg-surface text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-[1.2fr_150px_1fr_1fr]">
+                          <Input
+                            placeholder="Nome ou empresa"
+                            value={newClient.nome}
+                            onChange={(event) =>
+                              setNewClient({ ...newClient, nome: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="WhatsApp"
+                            value={newClient.whatsapp}
+                            onChange={(event) =>
+                              setNewClient({ ...newClient, whatsapp: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="CPF/CNPJ opcional"
+                            value={newClient.documento}
+                            onChange={(event) =>
+                              setNewClient({ ...newClient, documento: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Endereco opcional"
+                            value={newClient.endereco}
+                            onChange={(event) =>
+                              setNewClient({ ...newClient, endereco: event.target.value })
+                            }
+                          />
+                        </div>
+                        <Textarea
+                          className="mt-3 min-h-20 rounded-[22px]"
+                          placeholder="Observacoes, perfil de compra, limite, modelos de interesse..."
+                          value={newClient.observacoes}
+                          onChange={(event) =>
+                            setNewClient({ ...newClient, observacoes: event.target.value })
+                          }
+                        />
+                        <div className="mt-4 rounded-[22px] border border-border bg-surface-muted p-4">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                Importar lista de clientes
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Cole um por linha. Formato: nome; whatsapp; cpf/cnpj; observacao.
+                              </p>
+                            </div>
+                            <Button type="button" variant="outline" onClick={importClientList}>
+                              Importar lista
+                            </Button>
+                          </div>
+                          <Textarea
+                            className="mt-3 min-h-24 rounded-[18px] bg-surface"
+                            placeholder={`Joao Silva; 11999999999; 000.000.000-00; cliente final\nLoja Alfa; 11988888888; 00.000.000/0001-00; revenda`}
+                            value={clientListText}
+                            onChange={(event) => setClientListText(event.target.value)}
+                          />
+                        </div>
+                      </ModuleCard>
+                    </DialogContent>
+                  </Dialog>
+                )}
 
                 <DataCard>
                   <ResponsiveTable
@@ -2845,130 +2867,148 @@ function LojaDeIphonePage() {
 
             {active === "vendas" && (
               <>
-                <ModuleCard
-                  id="iphone-sale-form"
-                  title="Nova venda"
-                  icon={BadgeDollarSign}
-                  action={<Button onClick={addSale}>Registrar venda</Button>}
-                >
-                  <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
-                    {[
-                      { id: "avista", label: "A vista" },
-                      { id: "fiado", label: "Fiado" },
-                      { id: "emprestimo", label: "Emprestimo" },
-                    ].map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() =>
-                          setNewSale({
-                            ...newSale,
-                            modalidade: option.id as NonNullable<Sale["modalidade"]>,
-                            parcelas: option.id === "avista" ? "1" : newSale.parcelas,
-                          })
-                        }
-                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
-                          newSale.modalidade === option.id
-                            ? "bg-primary text-primary-foreground shadow-soft"
-                            : "bg-surface text-muted-foreground hover:text-foreground"
-                        }`}
+                {formModal === "sale" && (
+                  <Dialog open onOpenChange={(open) => !open && setFormModal(null)}>
+                    <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1120px] sm:rounded-2xl">
+                      <ModuleCard
+                        id="iphone-sale-form"
+                        title="Nova venda"
+                        icon={BadgeDollarSign}
+                        action={<Button onClick={addSale}>Registrar venda</Button>}
                       >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid gap-3 lg:grid-cols-[1fr_150px_1fr_130px_130px_110px]">
-                    <Input
-                      placeholder="Cliente"
-                      value={newSale.cliente}
-                      onChange={(event) => setNewSale({ ...newSale, cliente: event.target.value })}
-                    />
-                    <SelectLike
-                      value={newSale.tipo}
-                      onChange={(value) => setNewSale({ ...newSale, tipo: value as Sale["tipo"] })}
-                      options={["Celular", "Peça", "Serviço", "Combo"]}
-                    />
-                    <Input
-                      placeholder="Produto/peça/serviço"
-                      value={newSale.item}
-                      onChange={(event) => setNewSale({ ...newSale, item: event.target.value })}
-                    />
-                    <Input
-                      placeholder="Valor"
-                      value={newSale.valor}
-                      onChange={(event) => setNewSale({ ...newSale, valor: event.target.value })}
-                    />
-                    <Input
-                      placeholder="Entrada"
-                      value={newSale.entrada}
-                      onChange={(event) => setNewSale({ ...newSale, entrada: event.target.value })}
-                    />
-                    <Input
-                      placeholder="Parcelas"
-                      value={newSale.parcelas}
-                      onChange={(event) => setNewSale({ ...newSale, parcelas: event.target.value })}
-                    />
-                  </div>
-                  {newSale.modalidade === "emprestimo" && (
-                    <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground">
-                            Empréstimo programado
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            O sistema gera as cobranças mensais e acompanha cada parcela.
-                          </p>
-                        </div>
-                        <div className="rounded-full bg-surface px-3 py-2 text-xs font-semibold text-primary shadow-soft">
-                          Total programado: {brl(loanProgrammedTotalPreview)}
-                        </div>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-3">
-                        <Input
-                          placeholder="Juros mensal %"
-                          value={newSale.jurosMensal}
-                          inputMode="decimal"
-                          onChange={(event) =>
-                            setNewSale({ ...newSale, jurosMensal: event.target.value })
-                          }
-                        />
-                        <Input
-                          placeholder="Dia da cobrança"
-                          value={newSale.diaCobranca}
-                          inputMode="numeric"
-                          onChange={(event) =>
-                            setNewSale({ ...newSale, diaCobranca: event.target.value })
-                          }
-                        />
-                        <Input
-                          type="date"
-                          value={newSale.primeiraParcela}
-                          onChange={(event) =>
-                            setNewSale({ ...newSale, primeiraParcela: event.target.value })
-                          }
-                        />
-                      </div>
-                      {loanSchedulePreview.length > 0 && (
-                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                          {loanSchedulePreview.slice(0, 8).map((installment) => (
-                            <div
-                              key={installment.id}
-                              className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
+                        <div className="mb-4 flex flex-wrap gap-2 rounded-[22px] bg-surface-muted p-1">
+                          {[
+                            { id: "avista", label: "A vista" },
+                            { id: "fiado", label: "Fiado" },
+                            { id: "emprestimo", label: "Emprestimo" },
+                          ].map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() =>
+                                setNewSale({
+                                  ...newSale,
+                                  modalidade: option.id as NonNullable<Sale["modalidade"]>,
+                                  parcelas: option.id === "avista" ? "1" : newSale.parcelas,
+                                })
+                              }
+                              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                                newSale.modalidade === option.id
+                                  ? "bg-primary text-primary-foreground shadow-soft"
+                                  : "bg-surface text-muted-foreground hover:text-foreground"
+                              }`}
                             >
-                              <p className="font-semibold text-foreground">
-                                Parcela {installment.numero}/{loanInstallmentsPreview}
-                              </p>
-                              <p className="mt-1 text-muted-foreground">
-                                {installment.vencimento} • {brl(installment.valor)}
-                              </p>
-                            </div>
+                              {option.label}
+                            </button>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  )}
-                </ModuleCard>
+                        <div className="grid gap-3 lg:grid-cols-[1fr_150px_1fr_130px_130px_110px]">
+                          <Input
+                            placeholder="Cliente"
+                            value={newSale.cliente}
+                            onChange={(event) =>
+                              setNewSale({ ...newSale, cliente: event.target.value })
+                            }
+                          />
+                          <SelectLike
+                            value={newSale.tipo}
+                            onChange={(value) =>
+                              setNewSale({ ...newSale, tipo: value as Sale["tipo"] })
+                            }
+                            options={["Celular", "Peça", "Serviço", "Combo"]}
+                          />
+                          <Input
+                            placeholder="Produto/peça/serviço"
+                            value={newSale.item}
+                            onChange={(event) =>
+                              setNewSale({ ...newSale, item: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Valor"
+                            value={newSale.valor}
+                            onChange={(event) =>
+                              setNewSale({ ...newSale, valor: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Entrada"
+                            value={newSale.entrada}
+                            onChange={(event) =>
+                              setNewSale({ ...newSale, entrada: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Parcelas"
+                            value={newSale.parcelas}
+                            onChange={(event) =>
+                              setNewSale({ ...newSale, parcelas: event.target.value })
+                            }
+                          />
+                        </div>
+                        {newSale.modalidade === "emprestimo" && (
+                          <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                              <div>
+                                <h3 className="text-sm font-semibold text-foreground">
+                                  Empréstimo programado
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                  O sistema gera as cobranças mensais e acompanha cada parcela.
+                                </p>
+                              </div>
+                              <div className="rounded-full bg-surface px-3 py-2 text-xs font-semibold text-primary shadow-soft">
+                                Total programado: {brl(loanProgrammedTotalPreview)}
+                              </div>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <Input
+                                placeholder="Juros mensal %"
+                                value={newSale.jurosMensal}
+                                inputMode="decimal"
+                                onChange={(event) =>
+                                  setNewSale({ ...newSale, jurosMensal: event.target.value })
+                                }
+                              />
+                              <Input
+                                placeholder="Dia da cobrança"
+                                value={newSale.diaCobranca}
+                                inputMode="numeric"
+                                onChange={(event) =>
+                                  setNewSale({ ...newSale, diaCobranca: event.target.value })
+                                }
+                              />
+                              <Input
+                                type="date"
+                                value={newSale.primeiraParcela}
+                                onChange={(event) =>
+                                  setNewSale({ ...newSale, primeiraParcela: event.target.value })
+                                }
+                              />
+                            </div>
+                            {loanSchedulePreview.length > 0 && (
+                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                {loanSchedulePreview.slice(0, 8).map((installment) => (
+                                  <div
+                                    key={installment.id}
+                                    className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
+                                  >
+                                    <p className="font-semibold text-foreground">
+                                      Parcela {installment.numero}/{loanInstallmentsPreview}
+                                    </p>
+                                    <p className="mt-1 text-muted-foreground">
+                                      {installment.vencimento} • {brl(installment.valor)}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </ModuleCard>
+                    </DialogContent>
+                  </Dialog>
+                )}
                 {sales.some((sale) => sale.parcelasAgenda?.length) && (
                   <DataCard title="Empréstimos programados">
                     <ResponsiveTable
@@ -3033,137 +3073,152 @@ function LojaDeIphonePage() {
 
             {active === "emprestimos" && (
               <>
-                <ModuleCard
-                  id="iphone-loan-form"
-                  title="Registrar emprestimo de peca"
-                  icon={Wallet}
-                  action={<Button onClick={registerLoan}>Registrar emprestimo</Button>}
-                >
-                  <div className="grid gap-3 lg:grid-cols-[1fr_1.4fr_130px_130px_110px_120px_150px]">
-                    <div className="space-y-1.5">
-                      <Label>Cliente</Label>
-                      <Input
-                        placeholder="Nome do cliente"
-                        value={newLoan.cliente}
-                        onChange={(event) =>
-                          setNewLoan({ ...newLoan, cliente: event.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Peca ou celular emprestado</Label>
-                      {loanItemOptions.length > 0 ? (
-                        <SelectLike
-                          value={newLoan.item}
-                          onChange={(value) => setNewLoan({ ...newLoan, item: value })}
-                          placeholder="Selecionar do estoque"
-                          options={loanItemOptions}
-                        />
-                      ) : (
-                        <Input
-                          placeholder="Ex: Bateria iPhone 11 ou iPhone 13 128GB"
-                          value={newLoan.item}
-                          onChange={(event) => setNewLoan({ ...newLoan, item: event.target.value })}
-                        />
-                      )}
-                      <Input
-                        placeholder="Ou digite manualmente o item"
-                        value={newLoan.item}
-                        onChange={(event) => setNewLoan({ ...newLoan, item: event.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Valor</Label>
-                      <Input
-                        placeholder="0,00"
-                        value={newLoan.valor}
-                        inputMode="decimal"
-                        onChange={(event) => setNewLoan({ ...newLoan, valor: event.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Entrada</Label>
-                      <Input
-                        placeholder="0,00"
-                        value={newLoan.entrada}
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          setNewLoan({ ...newLoan, entrada: event.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Parcelas</Label>
-                      <Input
-                        placeholder="1"
-                        value={newLoan.parcelas}
-                        inputMode="numeric"
-                        onChange={(event) =>
-                          setNewLoan({ ...newLoan, parcelas: event.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Dia cobranca</Label>
-                      <Input
-                        placeholder="20"
-                        value={newLoan.diaCobranca}
-                        inputMode="numeric"
-                        onChange={(event) =>
-                          setNewLoan({ ...newLoan, diaCobranca: event.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Primeira parcela</Label>
-                      <Input
-                        type="date"
-                        value={newLoan.primeiraParcela}
-                        onChange={(event) =>
-                          setNewLoan({ ...newLoan, primeiraParcela: event.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-[1fr_160px]">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Agenda de cobranca</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Ao registrar, a peca baixa do estoque e as parcelas entram em Cobrancas.
-                      </p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        {loanFormSchedulePreview.slice(0, 4).map((installment) => (
-                          <div
-                            key={installment.id}
-                            className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
-                          >
-                            <p className="font-semibold text-foreground">
-                              Parcela {installment.numero}/{loanFormInstallmentsPreview}
-                            </p>
-                            <p className="mt-1 text-muted-foreground">
-                              {installment.vencimento} - {brl(installment.valor)}
-                            </p>
+                {formModal === "loan" && (
+                  <Dialog open onOpenChange={(open) => !open && setFormModal(null)}>
+                    <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1120px] sm:rounded-2xl">
+                      <ModuleCard
+                        id="iphone-loan-form"
+                        title="Registrar emprestimo de peca"
+                        icon={Wallet}
+                        action={<Button onClick={registerLoan}>Registrar emprestimo</Button>}
+                      >
+                        <div className="grid gap-3 lg:grid-cols-[1fr_1.4fr_130px_130px_110px_120px_150px]">
+                          <div className="space-y-1.5">
+                            <Label>Cliente</Label>
+                            <Input
+                              placeholder="Nome do cliente"
+                              value={newLoan.cliente}
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, cliente: event.target.value })
+                              }
+                            />
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rounded-[18px] bg-surface p-4 shadow-soft">
-                      <p className="text-xs text-muted-foreground">Total programado</p>
-                      <p className="mt-1 text-2xl font-semibold text-foreground">
-                        {brl(loanFormProgrammedTotalPreview)}
-                      </p>
-                      <Input
-                        className="mt-3"
-                        placeholder="Juros mensal %"
-                        value={newLoan.jurosMensal}
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          setNewLoan({ ...newLoan, jurosMensal: event.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-                </ModuleCard>
+                          <div className="space-y-1.5">
+                            <Label>Peca ou celular emprestado</Label>
+                            {loanItemOptions.length > 0 ? (
+                              <SelectLike
+                                value={newLoan.item}
+                                onChange={(value) => setNewLoan({ ...newLoan, item: value })}
+                                placeholder="Selecionar do estoque"
+                                options={loanItemOptions}
+                              />
+                            ) : (
+                              <Input
+                                placeholder="Ex: Bateria iPhone 11 ou iPhone 13 128GB"
+                                value={newLoan.item}
+                                onChange={(event) =>
+                                  setNewLoan({ ...newLoan, item: event.target.value })
+                                }
+                              />
+                            )}
+                            <Input
+                              placeholder="Ou digite manualmente o item"
+                              value={newLoan.item}
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, item: event.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Valor</Label>
+                            <Input
+                              placeholder="0,00"
+                              value={newLoan.valor}
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, valor: event.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Entrada</Label>
+                            <Input
+                              placeholder="0,00"
+                              value={newLoan.entrada}
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, entrada: event.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Parcelas</Label>
+                            <Input
+                              placeholder="1"
+                              value={newLoan.parcelas}
+                              inputMode="numeric"
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, parcelas: event.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Dia cobranca</Label>
+                            <Input
+                              placeholder="20"
+                              value={newLoan.diaCobranca}
+                              inputMode="numeric"
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, diaCobranca: event.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Primeira parcela</Label>
+                            <Input
+                              type="date"
+                              value={newLoan.primeiraParcela}
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, primeiraParcela: event.target.value })
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4 grid gap-3 rounded-[22px] border border-primary/15 bg-primary/5 p-4 md:grid-cols-[1fr_160px]">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">
+                              Agenda de cobranca
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Ao registrar, a peca baixa do estoque e as parcelas entram em
+                              Cobrancas.
+                            </p>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                              {loanFormSchedulePreview.slice(0, 4).map((installment) => (
+                                <div
+                                  key={installment.id}
+                                  className="rounded-2xl bg-surface px-3 py-2 text-xs shadow-soft"
+                                >
+                                  <p className="font-semibold text-foreground">
+                                    Parcela {installment.numero}/{loanFormInstallmentsPreview}
+                                  </p>
+                                  <p className="mt-1 text-muted-foreground">
+                                    {installment.vencimento} - {brl(installment.valor)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="rounded-[18px] bg-surface p-4 shadow-soft">
+                            <p className="text-xs text-muted-foreground">Total programado</p>
+                            <p className="mt-1 text-2xl font-semibold text-foreground">
+                              {brl(loanFormProgrammedTotalPreview)}
+                            </p>
+                            <Input
+                              className="mt-3"
+                              placeholder="Juros mensal %"
+                              value={newLoan.jurosMensal}
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                setNewLoan({ ...newLoan, jurosMensal: event.target.value })
+                              }
+                            />
+                          </div>
+                        </div>
+                      </ModuleCard>
+                    </DialogContent>
+                  </Dialog>
+                )}
 
                 <DataCard title="Emprestimos ativos">
                   <ResponsiveTable
