@@ -1133,6 +1133,8 @@ function LojaDeIphonePage() {
   const [phoneAction, setPhoneAction] = useState<"view" | "edit" | "sell" | null>(null);
   const [selectedPhone, setSelectedPhone] = useState<Phone | null>(null);
   const [phoneDraft, setPhoneDraft] = useState<Phone | null>(null);
+  const [partAction, setPartAction] = useState<"view" | null>(null);
+  const [selectedPart, setSelectedPart] = useState<Part | null>(null);
   const [phoneSaleDraft, setPhoneSaleDraft] = useState({
     cliente: "",
     valor: "",
@@ -1627,6 +1629,36 @@ function LojaDeIphonePage() {
       observacao: "",
     });
     setStockProductOpen(true);
+  }
+
+  function viewPart(part: Part) {
+    setSelectedPart(part);
+    setPartAction("view");
+  }
+
+  function startPartSale(part: Part) {
+    if (part.quantidade <= 0) {
+      toast.error("Essa peça está sem estoque para venda");
+      return;
+    }
+
+    const option = saleStockOptions.find((item) => item.key === `part:${part.id}`);
+    if (!option) {
+      toast.error("Não encontrei essa peça nas opções de venda");
+      return;
+    }
+
+    resetSaleForm();
+    setSaleItems([{ ...option, quantity: 1, discount: 0 }]);
+    setSalePaymentDraft({
+      forma: "Pix",
+      valor: String(option.price),
+      parcelas: "1",
+      observacao: "",
+    });
+    setFormModal("sale");
+    setActive("vendas");
+    toast.success("Venda aberta com a peça selecionada");
   }
 
   function startPrimaryFlow() {
@@ -3247,11 +3279,33 @@ function LojaDeIphonePage() {
                       <StockPill key="status" part={part} />,
                       <Actions
                         key="actions"
+                        onView={() => viewPart(part)}
+                        onEdit={() => editStockPart(part)}
+                        onSell={() => startPartSale(part)}
                         onDelete={() => void removeInventoryById(setParts, part)}
                       />,
                     ])}
                   />
                 </DataCard>
+                {partAction === "view" && selectedPart && (
+                  <PartActionPanel
+                    part={selectedPart}
+                    onClose={() => {
+                      setPartAction(null);
+                      setSelectedPart(null);
+                    }}
+                    onEdit={() => {
+                      editStockPart(selectedPart);
+                      setPartAction(null);
+                      setSelectedPart(null);
+                    }}
+                    onSell={() => {
+                      startPartSale(selectedPart);
+                      setPartAction(null);
+                      setSelectedPart(null);
+                    }}
+                  />
+                )}
               </>
             )}
 
@@ -6028,6 +6082,55 @@ function PhoneActionPanel({
   );
 }
 
+function PartActionPanel({
+  part,
+  onClose,
+  onEdit,
+  onSell,
+}: {
+  part: Part;
+  onClose: () => void;
+  onEdit: () => void;
+  onSell: () => void;
+}) {
+  return (
+    <ModuleCard
+      title="Detalhes da peça"
+      icon={Package}
+      action={
+        <Button variant="outline" onClick={onClose}>
+          Fechar
+        </Button>
+      }
+    >
+      <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-4">
+        <Field label="Peça" value={`${part.tipo} ${part.modelo}`} />
+        <Field label="Qualidade" value={part.qualidade} />
+        <Field label="SKU" value={part.sku || "Sem SKU"} />
+        <Field label="Fornecedor" value={part.fornecedor} />
+        <Field label="Custo" value={brl(part.custo)} />
+        <Field label="Venda" value={brl(part.preco)} />
+        <Field label="Estoque" value={`${part.quantidade} un.`} />
+        <Field label="Mínimo" value={`${part.minimo} un.`} />
+        <Field label="Local" value={part.localizacao} />
+        <Field label="Garantia" value={`${part.garantia} dias`} />
+        <Field label="Status" value={stockStatus(part.quantidade, part.minimo)} />
+        <Field label="Instalado" value={brl(part.precoInstalado)} />
+      </div>
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onEdit} className="rounded-full">
+          <PenLine className="h-4 w-4" />
+          Editar estoque
+        </Button>
+        <Button type="button" onClick={onSell} className="rounded-full">
+          <BadgeDollarSign className="h-4 w-4" />
+          Vender peça
+        </Button>
+      </div>
+    </ModuleCard>
+  );
+}
+
 function Actions({
   onView,
   onEdit,
@@ -6037,26 +6140,14 @@ function Actions({
   onView?: () => void;
   onEdit?: () => void;
   onSell?: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
-      <ActionButton
-        icon={Eye}
-        label="Ver"
-        onClick={onView ?? (() => toast.success("Visualizacao aberta"))}
-      />
-      <ActionButton
-        icon={PenLine}
-        label="Editar"
-        onClick={onEdit ?? (() => toast.success("Edicao pronta para conectar"))}
-      />
-      <ActionButton
-        icon={BadgeDollarSign}
-        label="Vender"
-        onClick={onSell ?? (() => toast.success("Venda iniciada"))}
-      />
-      <ActionButton icon={Trash2} label="Excluir" onClick={onDelete} danger />
+      {onView && <ActionButton icon={Eye} label="Ver" onClick={onView} />}
+      {onEdit && <ActionButton icon={PenLine} label="Editar" onClick={onEdit} />}
+      {onSell && <ActionButton icon={BadgeDollarSign} label="Vender" onClick={onSell} />}
+      {onDelete && <ActionButton icon={Trash2} label="Excluir" onClick={onDelete} danger />}
     </div>
   );
 }
