@@ -1100,6 +1100,10 @@ function LojaDeIphonePage() {
   const [newPhone, setNewPhone] = useState({ modelo: "iPhone 11", capacidade: "128GB", cor: "" });
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
   const [stockProduct, setStockProduct] = useState<StockProductForm>(emptyStockProductForm);
+  const [stockEditTarget, setStockEditTarget] = useState<null | {
+    kind: "phone" | "part";
+    id: number;
+  }>(null);
   const [stockProductOpen, setStockProductOpen] = useState(false);
   const [formModal, setFormModal] = useState<null | "service" | "client" | "sale" | "loan">(null);
   const [imeiQuery, setImeiQuery] = useState("");
@@ -1549,6 +1553,7 @@ function LojaDeIphonePage() {
   function openStockProductForm(kind: StockKind) {
     const isPhone = kind === "Aparelho";
     const isAccessory = kind.includes("Acess");
+    setStockEditTarget(null);
     setStockProduct({
       ...emptyStockProductForm,
       kind,
@@ -1560,6 +1565,66 @@ function LojaDeIphonePage() {
       quantidadeMinima: isPhone ? "0" : "2",
       diasGarantia: isPhone ? "90" : "30",
       disponibilidade: emptyStockProductForm.disponibilidade,
+    });
+    setStockProductOpen(true);
+  }
+
+  function editStockPhone(phone: Phone) {
+    setStockEditTarget({ kind: "phone", id: phone.id });
+    setStockProduct({
+      ...emptyStockProductForm,
+      kind: "Aparelho",
+      manual: false,
+      codigo: phone.imei,
+      tipo: "Celular",
+      sku: phone.serial,
+      dataEntrada: today,
+      nome: `${phone.modelo} ${phone.capacidade} ${phone.cor}`.trim(),
+      categoria: phone.estado,
+      marca: "Apple",
+      modelo: phone.modelo,
+      imei: phone.imei,
+      serial: phone.serial,
+      codigoBarras: phone.imei,
+      disponibilidade: phone.bloqueio,
+      cor: phone.cor,
+      gb: phone.capacidade,
+      quantidade: "1",
+      quantidadeMinima: "0",
+      valorCusto: String(phone.custoCompra),
+      valorVenda: String(phone.precoVenda),
+      diasGarantia: "90",
+      observacao: phone.observacoes,
+      tags: `${phone.bateria}% bateria`,
+    });
+    setStockProductOpen(true);
+  }
+
+  function editStockPart(part: Part) {
+    setStockEditTarget({ kind: "part", id: part.id });
+    setStockProduct({
+      ...emptyStockProductForm,
+      kind: ["Película", "Capinha", "Cabo", "Carregador"].includes(part.tipo)
+        ? "Acessório"
+        : "Peça",
+      manual: false,
+      codigo: part.localizacao,
+      tipo: part.tipo,
+      sku: part.sku,
+      dataEntrada: today,
+      nome: `${part.tipo} ${part.modelo}`.trim(),
+      categoria: part.qualidade,
+      marca: "Apple",
+      modelo: part.modelo,
+      codigoBarras: part.localizacao,
+      disponibilidade: part.status,
+      quantidade: String(part.quantidade),
+      quantidadeMinima: String(part.minimo),
+      valorCusto: String(part.custo),
+      valorVenda: String(part.preco),
+      diasGarantia: String(part.garantia),
+      fornecedor: part.fornecedor,
+      observacao: "",
     });
     setStockProductOpen(true);
   }
@@ -1853,8 +1918,13 @@ function LojaDeIphonePage() {
     }
 
     if (stockProduct.kind === "Aparelho") {
+      const currentPhone =
+        stockEditTarget?.kind === "phone"
+          ? phones.find((item) => item.id === stockEditTarget.id)
+          : undefined;
       const phone: Phone = {
-        id: Date.now(),
+        id: currentPhone?.id ?? Date.now(),
+        productId: currentPhone?.productId,
         modelo: stockProduct.modelo || productName,
         linha: (stockProduct.modelo || productName).replace("iPhone ", ""),
         capacidade: stockProduct.gb || "128GB",
@@ -1876,6 +1946,21 @@ function LojaDeIphonePage() {
         status: "Disponível" as PhoneStatus,
         observacoes: stockProduct.observacao || "Cadastrado pelo estoque completo.",
       };
+      if (currentPhone) {
+        const savedPhone = await updateLojaInventoryProduct(phone, "phone", user.id);
+        if (!savedPhone) return;
+
+        setPhones((items) =>
+          items.map((item) => (item.id === currentPhone.id ? (savedPhone as Phone) : item)),
+        );
+        toast.success("Aparelho atualizado no estoque");
+        setStockProduct(emptyStockProductForm);
+        setStockEditTarget(null);
+        setStockProductOpen(false);
+        resetFilters("estoque");
+        return;
+      }
+
       const savedPhone = await saveLojaInventoryProduct({
         userId: user.id,
         kind: "phone",
@@ -1892,8 +1977,13 @@ function LojaDeIphonePage() {
       setPhones((items) => [savedPhone as Phone, ...items]);
       toast.success("Aparelho cadastrado no estoque");
     } else {
+      const currentPart =
+        stockEditTarget?.kind === "part"
+          ? parts.find((item) => item.id === stockEditTarget.id)
+          : undefined;
       const part: Part = {
-        id: Date.now(),
+        id: currentPart?.id ?? Date.now(),
+        productId: currentPart?.productId,
         tipo: selectedType,
         modelo: stockProduct.manual
           ? stockProduct.modelo || stockProduct.marca
@@ -1912,6 +2002,21 @@ function LojaDeIphonePage() {
         garantia: warranty,
         status: stockStatus(quantity, minQuantity),
       };
+      if (currentPart) {
+        const savedPart = await updateLojaInventoryProduct(part, "part", user.id);
+        if (!savedPart) return;
+
+        setParts((items) =>
+          items.map((item) => (item.id === currentPart.id ? (savedPart as Part) : item)),
+        );
+        toast.success("Estoque da peça atualizado");
+        setStockProduct(emptyStockProductForm);
+        setStockEditTarget(null);
+        setStockProductOpen(false);
+        resetFilters("estoque");
+        return;
+      }
+
       const savedPart = await saveLojaInventoryProduct({
         userId: user.id,
         kind: "part",
@@ -1930,6 +2035,7 @@ function LojaDeIphonePage() {
     }
 
     setStockProduct(emptyStockProductForm);
+    setStockEditTarget(null);
     setStockProductOpen(false);
     resetFilters("estoque");
   }
@@ -3010,7 +3116,10 @@ function LojaDeIphonePage() {
 
             <Dialog
               open={stockProductOpen && canShowStockProductForm}
-              onOpenChange={(open) => setStockProductOpen(open)}
+              onOpenChange={(open) => {
+                setStockProductOpen(open);
+                if (!open) setStockEditTarget(null);
+              }}
             >
               <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1180px] sm:rounded-2xl">
                 <StockProductFormCard
@@ -3018,8 +3127,15 @@ function LojaDeIphonePage() {
                   form={stockProduct}
                   onChange={(patch) => setStockProduct((current) => ({ ...current, ...patch }))}
                   onSave={saveStockProduct}
-                  onReset={() => setStockProduct(emptyStockProductForm)}
-                  onClose={() => setStockProductOpen(false)}
+                  isEditing={Boolean(stockEditTarget)}
+                  onReset={() => {
+                    setStockEditTarget(null);
+                    setStockProduct(emptyStockProductForm);
+                  }}
+                  onClose={() => {
+                    setStockEditTarget(null);
+                    setStockProductOpen(false);
+                  }}
                 />
               </DialogContent>
             </Dialog>
@@ -4322,7 +4438,14 @@ function LojaDeIphonePage() {
             )}
 
             {active === "estoque" && (
-              <StockView phones={phones} parts={parts} totals={totals} loading={inventoryLoading} />
+              <StockView
+                phones={phones}
+                parts={parts}
+                totals={totals}
+                loading={inventoryLoading}
+                onEditPhone={editStockPhone}
+                onEditPart={editStockPart}
+              />
             )}
             {active === "relatorios" && (
               <ReportsView
@@ -4649,11 +4772,15 @@ function StockView({
   parts,
   totals,
   loading,
+  onEditPhone,
+  onEditPart,
 }: {
   phones: Phone[];
   parts: Part[];
   totals: ReturnType<typeof computeTotalsShape>;
   loading: boolean;
+  onEditPhone: (phone: Phone) => void;
+  onEditPart: (part: Part) => void;
 }) {
   const accessoryStock = parts.filter((item) =>
     ["Película", "Capinha", "Cabo", "Carregador"].includes(item.tipo),
@@ -4667,6 +4794,12 @@ function StockView({
         "1 un.",
         phone.imei ? `IMEI ${phone.imei}` : phone.serial || "Sem IMEI",
         <StatusPill key={`phone-${phone.id}`} status={phone.status} />,
+        <ActionButton
+          key={`edit-phone-${phone.id}`}
+          icon={Pencil}
+          label="Editar estoque"
+          onClick={() => onEditPhone(phone)}
+        />,
       ]),
     ...parts.map((part) => [
       part.tipo,
@@ -4674,6 +4807,12 @@ function StockView({
       `${part.quantidade} un.`,
       part.localizacao,
       <StockPill key={`part-${part.id}`} part={part} />,
+      <ActionButton
+        key={`edit-part-${part.id}`}
+        icon={Pencil}
+        label="Editar estoque"
+        onClick={() => onEditPart(part)}
+      />,
     ]),
   ];
   return (
@@ -4707,8 +4846,8 @@ function StockView({
       </div>
       <DataCard title="Movimentação e alertas">
         <ResponsiveTable
-          columns={["Tipo", "Item", "Estoque", "Local", "Status"]}
-          rows={loading ? [["Carregando...", "Estoque da sua conta", "", "", ""]] : rows}
+          columns={["Tipo", "Item", "Estoque", "Local", "Status", "Ações"]}
+          rows={loading ? [["Carregando...", "Estoque da sua conta", "", "", "", ""]] : rows}
         />
       </DataCard>
     </div>
@@ -4962,6 +5101,7 @@ function StockProductFormCard({
   form,
   onChange,
   onSave,
+  isEditing,
   onReset,
   onClose,
 }: {
@@ -4969,6 +5109,7 @@ function StockProductFormCard({
   form: StockProductForm;
   onChange: (patch: Partial<StockProductForm>) => void;
   onSave: () => void | Promise<void>;
+  isEditing?: boolean;
   onReset: () => void;
   onClose: () => void;
 }) {
@@ -5000,10 +5141,12 @@ function StockProductFormCard({
             </span>
             <div>
               <h2 className="text-base font-semibold tracking-tight text-foreground">
-                Cadastrar Produto em Estoque
+                {isEditing ? "Editar Produto em Estoque" : "Cadastrar Produto em Estoque"}
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Preencha apenas o essencial para cadastrar, vender e controlar o estoque.
+                {isEditing
+                  ? "Atualize quantidade, custo, venda, local e status sem recriar o produto."
+                  : "Preencha apenas o essencial para cadastrar, vender e controlar o estoque."}
               </p>
             </div>
           </div>
@@ -5319,7 +5462,7 @@ function StockProductFormCard({
         </Button>
         <Button onClick={onSave} className="rounded-full">
           <CheckCircle2 className="h-4 w-4" />
-          Salvar produto
+          {isEditing ? "Salvar alterações" : "Salvar produto"}
         </Button>
       </div>
     </section>
