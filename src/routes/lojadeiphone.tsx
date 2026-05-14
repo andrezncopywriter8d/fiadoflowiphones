@@ -1360,12 +1360,6 @@ function LojaDeIphonePage() {
         item.status,
       ),
   );
-  const loanItemOptions = [
-    ...parts.map((part) => `${part.tipo} ${part.modelo}`),
-    ...phones
-      .filter((phone) => phone.status !== "Vendido")
-      .map((phone) => `${phone.modelo} ${phone.capacidade} ${phone.cor}`),
-  ];
   const saleStockOptions: SaleStockOption[] = [
     ...phones
       .filter((phone) => phone.status.startsWith("Dispon"))
@@ -4196,25 +4190,9 @@ function LojaDeIphonePage() {
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label>Peca ou celular emprestado</Label>
-                            {loanItemOptions.length > 0 ? (
-                              <SelectLike
-                                value={newLoan.item}
-                                onChange={(value) => setNewLoan({ ...newLoan, item: value })}
-                                placeholder="Selecionar do estoque"
-                                options={loanItemOptions}
-                              />
-                            ) : (
-                              <Input
-                                placeholder="Ex: Bateria iPhone 11 ou iPhone 13 128GB"
-                                value={newLoan.item}
-                                onChange={(event) =>
-                                  setNewLoan({ ...newLoan, item: event.target.value })
-                                }
-                              />
-                            )}
+                            <Label>Nome do item emprestado</Label>
                             <Input
-                              placeholder="Ou digite manualmente o item"
+                              placeholder="Ex: Bateria iPhone 13, Tela iPhone 11, iPhone 12 128GB"
                               value={newLoan.item}
                               onChange={(event) =>
                                 setNewLoan({ ...newLoan, item: event.target.value })
