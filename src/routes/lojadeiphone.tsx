@@ -1,5 +1,7 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
 import {
@@ -8,6 +10,7 @@ import {
   BarChart3,
   BellRing,
   Boxes,
+  CalendarDays,
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
@@ -35,9 +38,11 @@ import {
 } from "lucide-react";
 import { AppLogo } from "@/components/layout/AppLogo";
 import { Button } from "@/components/ui/button";
+import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -1026,6 +1031,26 @@ const seedPayments: Payment[] = [
 ];
 
 const today = new Date().toISOString().slice(0, 10);
+
+const toDateInputValue = (date: Date) => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+};
+
+const parseDateInputValue = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return new Date();
+  return new Date(year, month - 1, day);
+};
+
+const formatDateLong = (value: string) => {
+  try {
+    return format(parseISO(value), "dd 'de' MMMM, yyyy", { locale: ptBR });
+  } catch {
+    return "Selecionar data";
+  }
+};
 
 const emptyStockProductForm: StockProductForm = {
   kind: "Peça",
@@ -4636,17 +4661,7 @@ function DashboardView({
             Selecione o dia para ver apenas as vendas reais dessa data.
           </p>
         </div>
-        <div className="flex flex-col gap-2 rounded-[18px] bg-surface-muted p-2 sm:min-w-[260px]">
-          <Label className="px-2 text-[11px] font-semibold uppercase text-muted-foreground">
-            Dia das vendas
-          </Label>
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(event) => onDateChange(event.target.value)}
-            className="rounded-2xl bg-surface"
-          />
-        </div>
+        <DashboardDatePicker value={selectedDate} onChange={onDateChange} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -5683,6 +5698,92 @@ function Filters({
       />
       <SelectLike value={category} onChange={onCategory} options={["Todos", ...categories]} />
     </div>
+  );
+}
+
+function DashboardDatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (date: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = parseDateInputValue(value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="group flex min-w-[260px] items-center justify-between gap-4 rounded-[22px] border border-border/80 bg-surface px-4 py-3 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+        >
+          <span className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <CalendarDays className="size-5" />
+            </span>
+            <span>
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Dia das vendas
+              </span>
+              <span className="block text-sm font-semibold text-foreground">
+                {formatDateLong(value)}
+              </span>
+            </span>
+          </span>
+          <span className="rounded-full bg-surface-muted px-3 py-1 text-xs font-semibold text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+            Alterar
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-auto rounded-[26px] border-border/70 bg-surface p-3 shadow-[0_24px_80px_rgba(20,23,38,0.16)]"
+      >
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(date) => {
+            if (!date) return;
+            onChange(toDateInputValue(date));
+            setOpen(false);
+          }}
+          locale={ptBR}
+          className="rounded-[22px] p-2 [--cell-size:2.35rem]"
+          classNames={{
+            caption_label: "text-sm font-bold capitalize text-foreground",
+            month_caption: "flex h-10 items-center justify-center px-10",
+            button_previous:
+              "rounded-full border border-border/60 bg-surface-muted text-foreground hover:bg-primary hover:text-primary-foreground",
+            button_next:
+              "rounded-full border border-border/60 bg-surface-muted text-foreground hover:bg-primary hover:text-primary-foreground",
+            weekday: "text-[11px] font-bold uppercase text-muted-foreground",
+            day: "p-0 text-center",
+          }}
+          components={{
+            DayButton: ({ className, ...props }) => (
+              <CalendarDayButton
+                className={`rounded-full text-sm font-semibold transition hover:bg-primary/10 hover:text-primary ${className ?? ""}`}
+                {...props}
+              />
+            ),
+          }}
+        />
+        <div className="mt-2 flex items-center justify-between border-t border-border/70 pt-3">
+          <Button
+            type="button"
+            variant="ghost"
+            className="rounded-full text-muted-foreground"
+            onClick={() => onChange(today)}
+          >
+            Hoje
+          </Button>
+          <Button type="button" className="rounded-full px-5" onClick={() => setOpen(false)}>
+            Aplicar
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
