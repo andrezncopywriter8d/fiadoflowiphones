@@ -4026,8 +4026,7 @@ function StockProductFormCard({
                 Cadastrar Produto em Estoque
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Base completa para aparelho, acessorio e peca, com custo, margem, fornecedor e dados
-                fiscais.
+                Preencha apenas o essencial para cadastrar, vender e controlar o estoque.
               </p>
             </div>
           </div>
@@ -4048,35 +4047,6 @@ function StockProductFormCard({
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto">
-          {[
-            "Dados gerais",
-            "Contas a Pagar",
-            "Forma de Pagamento",
-            "Catalogo",
-            "Custos extras",
-            "Anexos",
-            "Movimentacao de Estoque",
-            "Checklist",
-            "Outras informacoes",
-          ].map((tab, index) => (
-            <button
-              key={tab}
-              type="button"
-              className={`shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold transition ${
-                index === 0
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-surface text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() =>
-                index === 0 ? undefined : toast.success(`${tab}: sera conectado na proxima etapa`)
-              }
-            >
-              {tab}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -4167,11 +4137,6 @@ function StockProductFormCard({
             value={form.fornecedor}
             placeholder="Buscar fornecedor"
             onChange={(fornecedor) => onChange({ fornecedor })}
-          />
-          <StockArea
-            label="Observacao"
-            value={form.observacao}
-            onChange={(observacao) => onChange({ observacao })}
           />
         </div>
 
@@ -4285,81 +4250,26 @@ function StockProductFormCard({
             readOnly
             onChange={() => undefined}
           />
-          <StockArea label="Tags" value={form.tags} onChange={(tags) => onChange({ tags })} />
+          <StockArea
+            label="Observacao"
+            value={form.observacao}
+            onChange={(observacao) => onChange({ observacao })}
+          />
         </div>
       </div>
 
-      <div className="border-t border-border/70 p-4 sm:p-5">
-        <h3 className="mb-3 text-sm font-semibold text-foreground">Dados para Emissao de NF</h3>
-        <div className="grid gap-3 md:grid-cols-2">
-          <StockField label="CEST" value={form.cest} onChange={(cest) => onChange({ cest })} />
-          <StockField label="NCM" value={form.ncm} onChange={(ncm) => onChange({ ncm })} />
-          <StockSelect
-            label="Origem"
-            value={form.origem}
-            onChange={(origem) => onChange({ origem })}
-            options={[
-              "",
-              "0 - Nacional",
-              "1 - Estrangeira importacao direta",
-              "2 - Estrangeira mercado interno",
-            ]}
-          />
-          <StockField label="CST/CSOSN" value={form.cst} onChange={(cst) => onChange({ cst })} />
-          <StockField
-            label="CFOP Estadual (Saida)"
-            value={form.cfopSaidaEstadual}
-            onChange={(cfopSaidaEstadual) => onChange({ cfopSaidaEstadual })}
-          />
-          <StockField
-            label="CFOP Interestadual (Saida)"
-            value={form.cfopSaidaInterestadual}
-            onChange={(cfopSaidaInterestadual) => onChange({ cfopSaidaInterestadual })}
-          />
-          <StockField
-            label="CFOP Estadual (Entrada)"
-            value={form.cfopEntradaEstadual}
-            onChange={(cfopEntradaEstadual) => onChange({ cfopEntradaEstadual })}
-          />
-          <StockField
-            label="CFOP Interestadual (Entrada)"
-            value={form.cfopEntradaInterestadual}
-            onChange={(cfopEntradaInterestadual) => onChange({ cfopEntradaInterestadual })}
-          />
-          <div className="md:col-span-2">
-            <StockField
-              label="Tributacao"
-              value={form.tributacao}
-              placeholder="Buscar regra fiscal"
-              onChange={(tributacao) => onChange({ tributacao })}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 border-t border-border/70 bg-surface-muted/45 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={onSave} className="rounded-full">
-            <CheckCircle2 className="h-4 w-4" />
-            Salvar
-          </Button>
-          <Button type="button" variant="outline" onClick={onReset} className="rounded-full">
-            <Trash2 className="h-4 w-4" />
-            Limpar formulario
-          </Button>
-          <Button type="button" variant="outline" onClick={onClose} className="rounded-full">
-            <ArrowRight className="h-4 w-4 rotate-180" />
-            Fechar
-          </Button>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => toast.success("Configurador de campos preparado")}
-          className="rounded-full"
-        >
-          <Settings className="h-4 w-4" />
-          Configurar campos
+      <div className="flex flex-wrap gap-2 border-t border-border/70 bg-surface-muted/45 p-4 sm:justify-end sm:p-5">
+        <Button type="button" variant="outline" onClick={onClose} className="rounded-full">
+          <ArrowRight className="h-4 w-4 rotate-180" />
+          Fechar
+        </Button>
+        <Button type="button" variant="outline" onClick={onReset} className="rounded-full">
+          <Trash2 className="h-4 w-4" />
+          Limpar
+        </Button>
+        <Button onClick={onSave} className="rounded-full">
+          <CheckCircle2 className="h-4 w-4" />
+          Salvar produto
         </Button>
       </div>
     </section>
