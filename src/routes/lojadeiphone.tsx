@@ -1402,9 +1402,10 @@ function LojaDeIphonePage() {
   };
   const saleNetTotal = Math.max(saleTotals.gross - saleTotals.discount, 0);
   const salePendingTotal = Math.max(saleNetTotal - saleTotals.paid, 0);
-  const salePaymentNeedsInstallments = ["Cartao de credito", "Boleto", "Outro"].includes(
+  const salePaymentNeedsInstallments = ["Cartao de credito", "Outro"].includes(
     salePaymentDraft.forma,
   );
+  const salePaymentIsCreditMode = ["Fiado", "Emprestimo"].includes(salePaymentDraft.forma);
   const salePaymentGrid = salePaymentNeedsInstallments
     ? "lg:grid-cols-[190px_150px_120px_1fr_auto]"
     : "lg:grid-cols-[190px_150px_1fr_auto]";
@@ -2188,6 +2189,16 @@ function LojaDeIphonePage() {
   }
 
   function addSalePayment() {
+    if (salePaymentIsCreditMode) {
+      setNewSale((current) => ({
+        ...current,
+        modalidade: salePaymentDraft.forma === "Emprestimo" ? "emprestimo" : "fiado",
+      }));
+      setSalePaymentDraft({ forma: "Pix", valor: "", parcelas: "1", observacao: "" });
+      toast.success(`${salePaymentDraft.forma} aplicado como modalidade da venda`);
+      return;
+    }
+
     const value = moneyToNumber(salePaymentDraft.valor);
     const installments = salePaymentNeedsInstallments
       ? Math.max(1, Number(salePaymentDraft.parcelas) || 1)
@@ -3584,23 +3595,32 @@ function LojaDeIphonePage() {
                               <FieldBlock label="Forma">
                                 <SelectLike
                                   value={salePaymentDraft.forma}
-                                  onChange={(value) =>
+                                  onChange={(value) => {
+                                    if (value === "Fiado" || value === "Emprestimo") {
+                                      setNewSale({
+                                        ...newSale,
+                                        modalidade: value === "Emprestimo" ? "emprestimo" : "fiado",
+                                      });
+                                    }
                                     setSalePaymentDraft({
                                       ...salePaymentDraft,
                                       forma: value,
-                                      parcelas: ["Cartao de credito", "Boleto", "Outro"].includes(
-                                        value,
-                                      )
+                                      valor:
+                                        value === "Fiado" || value === "Emprestimo"
+                                          ? "0"
+                                          : salePaymentDraft.valor,
+                                      parcelas: ["Cartao de credito", "Outro"].includes(value)
                                         ? salePaymentDraft.parcelas
                                         : "1",
-                                    })
-                                  }
+                                    });
+                                  }}
                                   options={[
                                     "Pix",
                                     "Dinheiro",
                                     "Cartao de credito",
                                     "Cartao de debito",
-                                    "Boleto",
+                                    "Fiado",
+                                    "Emprestimo",
                                     "Outro",
                                   ]}
                                 />
@@ -3609,6 +3629,7 @@ function LojaDeIphonePage() {
                                 <Input
                                   placeholder="0,00"
                                   value={salePaymentDraft.valor}
+                                  disabled={salePaymentIsCreditMode}
                                   inputMode="decimal"
                                   onChange={(event) =>
                                     setSalePaymentDraft({
@@ -3646,7 +3667,9 @@ function LojaDeIphonePage() {
                               </FieldBlock>
                               <div className="flex items-end">
                                 <Button type="button" variant="outline" onClick={addSalePayment}>
-                                  + Adicionar pagamento
+                                  {salePaymentIsCreditMode
+                                    ? "Aplicar modalidade"
+                                    : "+ Adicionar pagamento"}
                                 </Button>
                               </div>
                             </div>
