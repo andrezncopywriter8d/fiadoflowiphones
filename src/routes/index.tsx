@@ -4804,7 +4804,7 @@ function LojaDeIphonePage() {
                   open={Boolean(selectedLoan)}
                   onOpenChange={(open) => !open && setSelectedLoanId(null)}
                 >
-                  <DialogContent className="clean-scrollbar max-h-[90vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[880px] sm:rounded-2xl">
+                  <DialogContent className="clean-scrollbar max-h-[90vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[980px] sm:rounded-2xl xl:max-w-[1040px]">
                     {selectedLoan && (
                       <ModuleCard
                         title={`Parcelas de ${selectedLoan.cliente}`}
@@ -4821,29 +4821,29 @@ function LojaDeIphonePage() {
                       >
                         {selectedLoanSummary && (
                           <>
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                               <MiniMetric
                                 title="Item emprestado"
                                 value={selectedLoan.item}
                                 icon={Package}
                               />
-                              <div className="rounded-2xl bg-surface-muted p-4 shadow-soft">
+                              <div className="rounded-2xl bg-surface-muted p-4 shadow-soft lg:col-span-2">
                                 <Label className="text-xs text-muted-foreground">
                                   Valor total do emprestimo
                                 </Label>
-                                <div className="mt-2 flex gap-2">
+                                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
                                   <Input
                                     value={loanTotalDraft}
                                     inputMode="decimal"
                                     onChange={(event) => setLoanTotalDraft(event.target.value)}
-                                    className="h-11 rounded-2xl bg-surface text-lg font-semibold"
+                                    className="h-11 min-w-0 rounded-2xl bg-surface text-lg font-semibold"
                                     aria-label="Valor total do emprestimo"
                                   />
                                   <Button
                                     type="button"
                                     size="sm"
                                     onClick={() => updateLoanTotalValue(selectedLoan.id)}
-                                    className="h-11 rounded-full"
+                                    className="h-11 rounded-full px-5"
                                   >
                                     Recalcular
                                   </Button>
@@ -4883,7 +4883,7 @@ function LojaDeIphonePage() {
                                 return (
                                   <div
                                     key={installment.id}
-                                    className={`grid gap-3 rounded-2xl border p-3 lg:grid-cols-[1fr_145px_145px_110px_128px_120px] lg:items-center ${
+                                    className={`grid gap-3 rounded-2xl border p-3 lg:grid-cols-[120px_145px_170px_112px_128px_120px] lg:items-center ${
                                       paid
                                         ? "border-success/20 bg-success/5"
                                         : installment.status === "atrasado"
