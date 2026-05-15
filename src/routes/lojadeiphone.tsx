@@ -4735,6 +4735,11 @@ function LojaDeIphonePage() {
                         <StatusPill key="status" status={sale.status} />,
                         <div key="actions" className="flex flex-wrap justify-end gap-2">
                           <ActionButton
+                            icon={PenLine}
+                            label="Editar emprestimo"
+                            onClick={() => setSelectedLoanId(sale.id)}
+                          />
+                          <ActionButton
                             icon={CheckCircle2}
                             label="Validar pagamento"
                             onClick={() => validateLoanPayment(sale.id)}
