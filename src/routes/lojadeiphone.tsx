@@ -2731,6 +2731,13 @@ function LojaDeIphonePage() {
     const monthlyInterest = Math.max(0, Number(newLoan.jurosMensal) || 0);
     const chargeDay = Math.min(31, Math.max(1, Number(newLoan.diaCobranca) || 20));
 
+    const selectedClient = clients.find((client) => client.nome === newLoan.cliente);
+
+    if (!selectedClient) {
+      toast.error("Selecione um cliente cadastrado para registrar o emprestimo");
+      return;
+    }
+
     if (!newLoan.item || value <= 0) {
       toast.error("Informe a peca ou celular emprestado e o valor");
       return;
@@ -2759,7 +2766,7 @@ function LojaDeIphonePage() {
     const loanKind = linkedPhone ? "Celular" : "Peça";
     const sale: Sale = {
       id: Date.now(),
-      cliente: newLoan.cliente || "Cliente balcao",
+      cliente: selectedClient.nome,
       tipo: loanKind,
       item: newLoan.item,
       quantidade: 1,
@@ -4226,19 +4233,25 @@ function LojaDeIphonePage() {
                         <div className="grid gap-4 lg:grid-cols-12">
                           <div className="space-y-1.5 lg:col-span-3">
                             <Label>Cliente</Label>
-                            <Input
-                              list="iphone-loan-client-options"
-                              placeholder="Nome do cliente"
+                            <select
                               value={newLoan.cliente}
                               onChange={(event) =>
                                 setNewLoan({ ...newLoan, cliente: event.target.value })
                               }
-                            />
-                            <datalist id="iphone-loan-client-options">
+                              className="h-11 w-full min-w-0 rounded-2xl border border-border bg-surface-muted px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            >
+                              <option value="">Selecionar cliente cadastrado</option>
                               {clients.map((client) => (
-                                <option key={client.id} value={client.nome} />
+                                <option key={client.id} value={client.nome}>
+                                  {client.nome}
+                                </option>
                               ))}
-                            </datalist>
+                            </select>
+                            {clients.length === 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Cadastre um cliente antes de registrar emprestimo.
+                              </p>
+                            )}
                           </div>
                           <div className="space-y-1.5 lg:col-span-3">
                             <Label>Nome do item emprestado</Label>
