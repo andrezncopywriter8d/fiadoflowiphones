@@ -172,15 +172,19 @@ type Client = {
   tipo: "B2C" | "B2B";
   whatsapp: string;
   cpf: string;
+  email?: string;
   endereco: string;
+  cidade?: string;
+  bairro?: string;
   compras: number;
   totalComprado: number;
   aberto: number;
   aparelhos: string[];
   servicos: string[];
   pecas: string[];
-  status: "Ativo" | "Inadimplente" | "Bloqueado" | "VIP";
+  status: "Ativo" | "Inativo" | "Inadimplente" | "Bloqueado" | "VIP";
   observacoes?: string;
+  dataCadastro?: string;
 };
 
 type Sale = {
@@ -1285,9 +1289,25 @@ function LojaDeIphonePage() {
     tipo: "B2C" as Client["tipo"],
     whatsapp: "",
     documento: "",
+    email: "",
     endereco: "",
+    cidade: "",
+    bairro: "",
+    status: "Ativo" as Client["status"],
     observacoes: "",
   });
+  const [clientColumnFilters, setClientColumnFilters] = useState({
+    nome: "",
+    whatsapp: "",
+    documento: "",
+    email: "",
+    status: "Todos",
+    aberto: "Todos",
+    ultimaCompra: "",
+  });
+  const [clientPanelMode, setClientPanelMode] = useState<"view" | "edit" | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+  const [clientDraft, setClientDraft] = useState<Client | null>(null);
   const [clientListText, setClientListText] = useState("");
   const [newPhone, setNewPhone] = useState({ modelo: "iPhone 11", capacidade: "128GB", cor: "" });
   const [newPart, setNewPart] = useState({ tipo: "Bateria", modelo: "iPhone 11", quantidade: "1" });
@@ -1576,16 +1596,74 @@ function LojaDeIphonePage() {
       item.status,
     ),
   );
-  const filteredClients = clients.filter(
-    (item) =>
+  const clientInsights = (client: Client) => {
+    const relatedSales = sales.filter((sale) => sale.cliente === client.nome);
+    const relatedPayments = payments.filter((payment) => payment.cliente === client.nome);
+    const relatedServices = services.filter((service) => service.cliente === client.nome);
+    const purchases = relatedSales.filter((sale) => sale.modalidade !== "emprestimo");
+    const loans = relatedSales.filter((sale) => sale.modalidade === "emprestimo");
+    const totalBought =
+      purchases.reduce((acc, sale) => acc + sale.unitario * sale.quantidade - sale.desconto, 0) ||
+      client.totalComprado;
+    const paid = relatedPayments.reduce((acc, payment) => acc + payment.valor, 0);
+    const open =
+      relatedSales.reduce((acc, sale) => {
+        const total = sale.totalProgramado ?? sale.unitario * sale.quantidade - sale.desconto;
+        return acc + Math.max(total - sale.entrada, 0);
+      }, 0) - paid;
+    const lastSale = [...relatedSales].sort((a, b) =>
+      String(b.dataVenda ?? b.vencimento).localeCompare(String(a.dataVenda ?? a.vencimento)),
+    )[0];
+
+    return {
+      purchases,
+      loans,
+      payments: relatedPayments,
+      services: relatedServices,
+      totalBought,
+      open: Math.max(open || client.aberto, 0),
+      lastItem: lastSale?.item ?? client.aparelhos[0] ?? client.pecas[0] ?? "Sem compra ainda",
+    };
+  };
+  const selectedClient = clients.find((client) => client.id === selectedClientId) ?? null;
+  const filteredClients = clients.filter((item) => {
+    const insights = clientInsights(item);
+    const document = item.cpf ?? "";
+    const email = item.email ?? "";
+    const columnMatch =
+      searchIn([item.nome], clientColumnFilters.nome) &&
+      searchIn([item.whatsapp], clientColumnFilters.whatsapp) &&
+      searchIn([document], clientColumnFilters.documento) &&
+      searchIn([email], clientColumnFilters.email) &&
+      searchIn([insights.lastItem], clientColumnFilters.ultimaCompra) &&
+      (clientColumnFilters.status === "Todos" || item.status === clientColumnFilters.status) &&
+      (clientColumnFilters.aberto === "Todos" ||
+        (clientColumnFilters.aberto === "Com debito" && insights.open > 0) ||
+        (clientColumnFilters.aberto === "Sem debito" && insights.open <= 0));
+
+    return (
+      columnMatch &&
       matchesFilters(
-        [item.nome, item.tipo, item.whatsapp, item.cpf, item.status, item.observacoes ?? ""],
+        [
+          item.nome,
+          item.tipo,
+          item.whatsapp,
+          document,
+          email,
+          item.endereco,
+          item.cidade ?? "",
+          item.bairro ?? "",
+          item.status,
+          item.observacoes ?? "",
+          insights.lastItem,
+        ],
         query,
         statusFilter,
         item.status,
       ) &&
-      (categoryFilter === "Todos" || item.tipo === categoryFilter),
-  );
+      (categoryFilter === "Todos" || item.tipo === categoryFilter)
+    );
+  });
   const filteredSales = sales.filter(
     (item) =>
       item.modalidade !== "emprestimo" &&
@@ -1933,6 +2011,7 @@ function LojaDeIphonePage() {
     }
 
     if (active === "clientes") {
+      resetClientForm();
       setFormModal("client");
       toast.success("Cadastro de cliente pronto para preencher");
       return;
@@ -2388,7 +2467,11 @@ function LojaDeIphonePage() {
     tipo: Client["tipo"];
     whatsapp?: string;
     documento?: string;
+    email?: string;
     endereco?: string;
+    cidade?: string;
+    bairro?: string;
+    status?: Client["status"];
     observacoes?: string;
   }): Client {
     return {
@@ -2397,16 +2480,124 @@ function LojaDeIphonePage() {
       tipo: draft.tipo,
       whatsapp: draft.whatsapp?.trim() || "",
       cpf: draft.documento?.trim() || "",
+      email: draft.email?.trim() || "",
       endereco: draft.endereco?.trim() || "",
+      cidade: draft.cidade?.trim() || "",
+      bairro: draft.bairro?.trim() || "",
       compras: 0,
       totalComprado: 0,
       aberto: 0,
       aparelhos: [],
       servicos: [],
       pecas: [],
-      status: "Ativo",
+      status: draft.status ?? "Ativo",
       observacoes: draft.observacoes?.trim() || "",
+      dataCadastro: today,
     };
+  }
+
+  function resetClientForm() {
+    setNewClient({
+      nome: "",
+      tipo: "B2C",
+      whatsapp: "",
+      documento: "",
+      email: "",
+      endereco: "",
+      cidade: "",
+      bairro: "",
+      status: "Ativo",
+      observacoes: "",
+    });
+  }
+
+  function openClientPanel(client: Client, mode: "view" | "edit") {
+    setSelectedClientId(client.id);
+    setClientPanelMode(mode);
+    setClientDraft({
+      ...client,
+      email: client.email ?? "",
+      cidade: client.cidade ?? "",
+      bairro: client.bairro ?? "",
+      dataCadastro: client.dataCadastro ?? today,
+    });
+  }
+
+  function saveClientEdit() {
+    if (!clientDraft || !selectedClient) return;
+
+    if (!clientDraft.nome.trim()) {
+      toast.error("Informe o nome do cliente");
+      return;
+    }
+
+    const previousName = selectedClient.nome;
+    const nextName = clientDraft.nome.trim();
+    const nextClient: Client = {
+      ...selectedClient,
+      ...clientDraft,
+      nome: nextName,
+      whatsapp: clientDraft.whatsapp.trim(),
+      cpf: clientDraft.cpf.trim(),
+      email: clientDraft.email?.trim() || "",
+      endereco: clientDraft.endereco.trim(),
+      cidade: clientDraft.cidade?.trim() || "",
+      bairro: clientDraft.bairro?.trim() || "",
+      observacoes: clientDraft.observacoes?.trim() || "",
+    };
+
+    setClients((items) =>
+      items.map((client) => (client.id === nextClient.id ? nextClient : client)),
+    );
+
+    if (previousName !== nextName) {
+      setSales((items) =>
+        items.map((sale) =>
+          sale.cliente === previousName ? { ...sale, cliente: nextName } : sale,
+        ),
+      );
+      setPayments((items) =>
+        items.map((payment) =>
+          payment.cliente === previousName ? { ...payment, cliente: nextName } : payment,
+        ),
+      );
+      setServices((items) =>
+        items.map((service) =>
+          service.cliente === previousName ? { ...service, cliente: nextName } : service,
+        ),
+      );
+    }
+
+    setClientPanelMode(null);
+    setSelectedClientId(null);
+    setClientDraft(null);
+    toast.success("Cliente atualizado");
+  }
+
+  function deleteOrDeactivateClient(client: Client) {
+    const insights = clientInsights(client);
+    const hasHistory =
+      insights.purchases.length ||
+      insights.loans.length ||
+      insights.payments.length ||
+      insights.services.length ||
+      insights.open > 0;
+
+    if (hasHistory) {
+      const confirmed = window.confirm(
+        "Este cliente tem historico financeiro. Em vez de excluir, deseja inativar o cadastro?",
+      );
+      if (!confirmed) return;
+      setClients((items) =>
+        items.map((item) => (item.id === client.id ? { ...item, status: "Inativo" } : item)),
+      );
+      toast.success("Cliente inativado para preservar o historico");
+      return;
+    }
+
+    if (!window.confirm("Excluir este cliente definitivamente?")) return;
+    setClients((items) => items.filter((item) => item.id !== client.id));
+    toast.success("Cliente excluido");
   }
 
   function addClient() {
@@ -2421,19 +2612,16 @@ function LojaDeIphonePage() {
         tipo: newClient.tipo,
         whatsapp: newClient.whatsapp,
         documento: newClient.documento,
+        email: newClient.email,
         endereco: newClient.endereco,
+        cidade: newClient.cidade,
+        bairro: newClient.bairro,
+        status: newClient.status,
         observacoes: newClient.observacoes,
       }),
       ...items,
     ]);
-    setNewClient({
-      nome: "",
-      tipo: newClient.tipo,
-      whatsapp: "",
-      documento: "",
-      endereco: "",
-      observacoes: "",
-    });
+    resetClientForm();
     setFormModal(null);
     toast.success("Cliente cadastrado");
   }
@@ -3953,11 +4141,39 @@ function LojaDeIphonePage() {
                             }
                           />
                           <Input
+                            placeholder="E-mail"
+                            value={newClient.email}
+                            onChange={(event) =>
+                              setNewClient({ ...newClient, email: event.target.value })
+                            }
+                          />
+                          <Input
                             placeholder="Endereco opcional"
                             value={newClient.endereco}
                             onChange={(event) =>
                               setNewClient({ ...newClient, endereco: event.target.value })
                             }
+                          />
+                          <Input
+                            placeholder="Cidade"
+                            value={newClient.cidade}
+                            onChange={(event) =>
+                              setNewClient({ ...newClient, cidade: event.target.value })
+                            }
+                          />
+                          <Input
+                            placeholder="Bairro"
+                            value={newClient.bairro}
+                            onChange={(event) =>
+                              setNewClient({ ...newClient, bairro: event.target.value })
+                            }
+                          />
+                          <SelectLike
+                            value={newClient.status}
+                            onChange={(value) =>
+                              setNewClient({ ...newClient, status: value as Client["status"] })
+                            }
+                            options={["Ativo", "Inativo", "VIP", "Inadimplente", "Bloqueado"]}
                           />
                         </div>
                         <Textarea
@@ -3994,33 +4210,428 @@ function LojaDeIphonePage() {
                   </Dialog>
                 )}
 
+                {clientPanelMode && clientDraft && selectedClient && (
+                  <Dialog open onOpenChange={(open) => !open && setClientPanelMode(null)}>
+                    <DialogContent className="clean-scrollbar max-h-[92vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1040px] sm:rounded-2xl">
+                      <ModuleCard
+                        id="iphone-client-details"
+                        title={
+                          clientPanelMode === "edit"
+                            ? "Editar cliente"
+                            : "Ficha de " + selectedClient.nome
+                        }
+                        icon={Users}
+                        action={
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {clientPanelMode === "view" && (
+                              <Button
+                                type="button"
+                                onClick={() => setClientPanelMode("edit")}
+                                className="rounded-full"
+                              >
+                                <PenLine className="h-4 w-4" />
+                                Editar
+                              </Button>
+                            )}
+                            {clientPanelMode === "edit" && (
+                              <Button
+                                type="button"
+                                onClick={saveClientEdit}
+                                className="rounded-full"
+                              >
+                                Salvar alteracoes
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setClientPanelMode(null)}
+                              className="rounded-full"
+                            >
+                              Fechar
+                            </Button>
+                          </div>
+                        }
+                      >
+                        {(() => {
+                          const insights = clientInsights(selectedClient);
+
+                          return (
+                            <div className="space-y-4">
+                              <div className="grid gap-3 md:grid-cols-4">
+                                <MiniMetric
+                                  title="Total comprado"
+                                  value={brl(insights.totalBought)}
+                                  icon={BadgeDollarSign}
+                                />
+                                <MiniMetric
+                                  title="Valor em aberto"
+                                  value={brl(insights.open)}
+                                  icon={BellRing}
+                                />
+                                <MiniMetric
+                                  title="Compras"
+                                  value={String(insights.purchases.length)}
+                                  icon={Package}
+                                />
+                                <MiniMetric
+                                  title="Servicos"
+                                  value={String(insights.services.length)}
+                                  icon={Wrench}
+                                />
+                              </div>
+
+                              {clientPanelMode === "edit" ? (
+                                <div className="grid gap-3 lg:grid-cols-3">
+                                  <FieldBlock label="Nome do cliente">
+                                    <Input
+                                      value={clientDraft.nome}
+                                      onChange={(event) =>
+                                        setClientDraft({ ...clientDraft, nome: event.target.value })
+                                      }
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="Tipo">
+                                    <SelectLike
+                                      value={clientDraft.tipo}
+                                      onChange={(value) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          tipo: value as Client["tipo"],
+                                        })
+                                      }
+                                      options={["B2C", "B2B"]}
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="Status">
+                                    <SelectLike
+                                      value={clientDraft.status}
+                                      onChange={(value) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          status: value as Client["status"],
+                                        })
+                                      }
+                                      options={[
+                                        "Ativo",
+                                        "Inativo",
+                                        "VIP",
+                                        "Inadimplente",
+                                        "Bloqueado",
+                                      ]}
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="Telefone / WhatsApp">
+                                    <Input
+                                      value={clientDraft.whatsapp}
+                                      onChange={(event) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          whatsapp: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="CPF/CNPJ">
+                                    <Input
+                                      value={clientDraft.cpf}
+                                      onChange={(event) =>
+                                        setClientDraft({ ...clientDraft, cpf: event.target.value })
+                                      }
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="E-mail">
+                                    <Input
+                                      value={clientDraft.email ?? ""}
+                                      onChange={(event) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          email: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="Endereco">
+                                    <Input
+                                      value={clientDraft.endereco}
+                                      onChange={(event) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          endereco: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="Cidade">
+                                    <Input
+                                      value={clientDraft.cidade ?? ""}
+                                      onChange={(event) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          cidade: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="Bairro">
+                                    <Input
+                                      value={clientDraft.bairro ?? ""}
+                                      onChange={(event) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          bairro: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </FieldBlock>
+                                  <FieldBlock label="Data de cadastro">
+                                    <Input value={clientDraft.dataCadastro ?? today} disabled />
+                                  </FieldBlock>
+                                  <FieldBlock label="Total comprado">
+                                    <Input value={brl(insights.totalBought)} disabled />
+                                  </FieldBlock>
+                                  <FieldBlock label="Valor em aberto">
+                                    <Input value={brl(insights.open)} disabled />
+                                  </FieldBlock>
+                                  <FieldBlock label="Observacoes">
+                                    <Textarea
+                                      value={clientDraft.observacoes ?? ""}
+                                      onChange={(event) =>
+                                        setClientDraft({
+                                          ...clientDraft,
+                                          observacoes: event.target.value,
+                                        })
+                                      }
+                                      className="min-h-24 rounded-2xl bg-surface-muted lg:col-span-3"
+                                    />
+                                  </FieldBlock>
+                                </div>
+                              ) : (
+                                <div className="grid gap-4 lg:grid-cols-2">
+                                  <div className="rounded-[22px] bg-surface-muted p-4">
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                      Dados cadastrais
+                                    </h3>
+                                    <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
+                                      <Field label="Codigo" value={"#" + selectedClient.id} />
+                                      <Field label="Tipo" value={selectedClient.tipo} />
+                                      <Field
+                                        label="WhatsApp"
+                                        value={selectedClient.whatsapp || "-"}
+                                      />
+                                      <Field label="CPF/CNPJ" value={selectedClient.cpf || "-"} />
+                                      <Field label="E-mail" value={selectedClient.email || "-"} />
+                                      <Field label="Status" value={selectedClient.status} />
+                                      <Field
+                                        label="Endereco"
+                                        value={selectedClient.endereco || "-"}
+                                      />
+                                      <Field
+                                        label="Cidade/Bairro"
+                                        value={[
+                                          selectedClient.cidade || "-",
+                                          selectedClient.bairro || "-",
+                                        ].join(" / ")}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="rounded-[22px] bg-surface-muted p-4">
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                      Historico
+                                    </h3>
+                                    <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
+                                      <p>
+                                        Ultima compra:{" "}
+                                        <strong className="text-foreground">
+                                          {insights.lastItem}
+                                        </strong>
+                                      </p>
+                                      <p>
+                                        Emprestimos:{" "}
+                                        <strong className="text-foreground">
+                                          {insights.loans.map((sale) => sale.item).join(", ") ||
+                                            "Nenhum"}
+                                        </strong>
+                                      </p>
+                                      <p>
+                                        Servicos:{" "}
+                                        <strong className="text-foreground">
+                                          {insights.services
+                                            .map((service) => service.servico)
+                                            .join(", ") || "Nenhum"}
+                                        </strong>
+                                      </p>
+                                      <p>
+                                        Pagamentos:{" "}
+                                        <strong className="text-foreground">
+                                          {insights.payments.length}
+                                        </strong>
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="rounded-[22px] bg-surface-muted p-4 lg:col-span-2">
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                      Observacoes internas
+                                    </h3>
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                      {selectedClient.observacoes ||
+                                        "Nenhuma observacao cadastrada."}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </ModuleCard>
+                    </DialogContent>
+                  </Dialog>
+                )}
+
                 <DataCard>
+                  <div className="mb-4 grid gap-3 rounded-[22px] bg-surface-muted p-3 lg:grid-cols-[1.2fr_1fr_1fr_1fr_160px_160px_1fr]">
+                    <Input
+                      value={clientColumnFilters.nome}
+                      onChange={(event) =>
+                        setClientColumnFilters({ ...clientColumnFilters, nome: event.target.value })
+                      }
+                      placeholder="Filtrar nome"
+                      className="h-10 rounded-full bg-surface"
+                    />
+                    <Input
+                      value={clientColumnFilters.whatsapp}
+                      onChange={(event) =>
+                        setClientColumnFilters({
+                          ...clientColumnFilters,
+                          whatsapp: event.target.value,
+                        })
+                      }
+                      placeholder="Telefone"
+                      className="h-10 rounded-full bg-surface"
+                    />
+                    <Input
+                      value={clientColumnFilters.documento}
+                      onChange={(event) =>
+                        setClientColumnFilters({
+                          ...clientColumnFilters,
+                          documento: event.target.value,
+                        })
+                      }
+                      placeholder="CPF/CNPJ"
+                      className="h-10 rounded-full bg-surface"
+                    />
+                    <Input
+                      value={clientColumnFilters.email}
+                      onChange={(event) =>
+                        setClientColumnFilters({
+                          ...clientColumnFilters,
+                          email: event.target.value,
+                        })
+                      }
+                      placeholder="E-mail"
+                      className="h-10 rounded-full bg-surface"
+                    />
+                    <SelectLike
+                      value={clientColumnFilters.status}
+                      onChange={(value) =>
+                        setClientColumnFilters({ ...clientColumnFilters, status: value })
+                      }
+                      options={["Todos", "Ativo", "Inativo", "VIP", "Inadimplente", "Bloqueado"]}
+                    />
+                    <SelectLike
+                      value={clientColumnFilters.aberto}
+                      onChange={(value) =>
+                        setClientColumnFilters({ ...clientColumnFilters, aberto: value })
+                      }
+                      options={["Todos", "Com debito", "Sem debito"]}
+                    />
+                    <Input
+                      value={clientColumnFilters.ultimaCompra}
+                      onChange={(event) =>
+                        setClientColumnFilters({
+                          ...clientColumnFilters,
+                          ultimaCompra: event.target.value,
+                        })
+                      }
+                      placeholder="Ultima compra"
+                      className="h-10 rounded-full bg-surface"
+                    />
+                  </div>
                   <ResponsiveTable
                     columns={[
-                      "Cliente",
-                      "Tipo",
-                      "Histórico",
+                      "Codigo",
+                      "Nome",
+                      "Telefone",
+                      "CPF/CNPJ",
+                      "E-mail",
+                      "Endereco",
+                      "Ultima compra",
                       "Compras",
                       "Total comprado",
                       "Em aberto",
                       "Status",
-                      "Ações",
+                      "Acoes",
                     ]}
-                    rows={filteredClients.map((client) => [
-                      <ItemTitle
-                        key="cliente"
-                        title={client.nome}
-                        subtitle={`${client.whatsapp} • ${client.endereco || "Sem endereço"}`}
-                      />,
-                      <StatusPill key="tipo" status={client.tipo} />,
-                      `${client.aparelhos.join(", ") || "Sem aparelhos"} • ${client.servicos.join(", ") || "Sem serviços"}`,
-                      String(client.compras),
-                      brl(client.totalComprado),
-                      brl(client.aberto),
-                      <StatusPill key="status" status={client.status} />,
-                      <Actions key="actions" onDelete={() => removeById(setClients, client.id)} />,
-                    ])}
+                    rows={filteredClients.map((client) => {
+                      const insights = clientInsights(client);
+
+                      return [
+                        "#" + client.id,
+                        <ItemTitle
+                          key="cliente"
+                          title={client.nome}
+                          subtitle={[client.tipo, client.status].join(" - ")}
+                        />,
+                        client.whatsapp || "-",
+                        client.cpf || "-",
+                        client.email || "-",
+                        <ItemTitle
+                          key="endereco"
+                          title={client.endereco || "Sem endereco"}
+                          subtitle={[client.cidade || "-", client.bairro || "-"].join(" / ")}
+                        />,
+                        insights.lastItem,
+                        String(insights.purchases.length || client.compras),
+                        brl(insights.totalBought),
+                        brl(insights.open),
+                        <StatusPill key="status" status={client.status} />,
+                        <div key="actions" className="flex flex-wrap justify-end gap-2">
+                          <ActionButton
+                            icon={Eye}
+                            label="Visualizar cliente"
+                            onClick={() => openClientPanel(client, "view")}
+                          />
+                          <ActionButton
+                            icon={PenLine}
+                            label="Editar cliente"
+                            onClick={() => openClientPanel(client, "edit")}
+                          />
+                          <ActionButton
+                            icon={FileText}
+                            label="Ver historico"
+                            onClick={() => openClientPanel(client, "view")}
+                          />
+                          <ActionButton
+                            icon={BadgeDollarSign}
+                            label="Ver debitos"
+                            onClick={() => openClientPanel(client, "view")}
+                          />
+                          <ActionButton
+                            icon={Trash2}
+                            label="Excluir ou inativar"
+                            danger
+                            onClick={() => deleteOrDeactivateClient(client)}
+                          />
+                        </div>,
+                      ];
+                    })}
                   />
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span>
+                      Exibindo {filteredClients.length} de {clients.length} clientes cadastrados
+                    </span>
+                    <span>Pagina 1 de 1</span>
+                  </div>
                 </DataCard>
               </>
             )}
