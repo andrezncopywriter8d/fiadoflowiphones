@@ -4849,7 +4849,7 @@ function LojaDeIphonePage() {
                   open={Boolean(selectedLoan)}
                   onOpenChange={(open) => !open && setSelectedLoanId(null)}
                 >
-                  <DialogContent className="clean-scrollbar max-h-[90vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[980px] sm:rounded-2xl xl:max-w-[1040px]">
+                  <DialogContent className="clean-scrollbar max-h-[90vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[1040px] sm:rounded-2xl xl:max-w-[1160px]">
                     {selectedLoan && (
                       <ModuleCard
                         title={`Parcelas de ${selectedLoan.cliente}`}
@@ -4866,29 +4866,29 @@ function LojaDeIphonePage() {
                       >
                         {selectedLoanSummary && (
                           <>
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_minmax(280px,1.55fr)_1fr_1fr_1fr]">
                               <MiniMetric
                                 title="Item emprestado"
                                 value={selectedLoan.item}
                                 icon={Package}
                               />
-                              <div className="rounded-2xl bg-surface-muted p-4 shadow-soft lg:col-span-2">
+                              <div className="flex min-w-0 flex-col gap-3 rounded-2xl bg-surface-muted p-4 shadow-soft">
                                 <Label className="text-xs text-muted-foreground">
                                   Valor total do emprestimo
                                 </Label>
-                                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                                <div className="grid min-w-0 gap-3">
                                   <Input
                                     value={loanTotalDraft}
                                     inputMode="decimal"
                                     onChange={(event) => setLoanTotalDraft(event.target.value)}
-                                    className="h-11 min-w-0 rounded-2xl bg-surface text-lg font-semibold"
+                                    className="h-12 min-w-[140px] rounded-2xl bg-surface px-4 text-xl font-semibold"
                                     aria-label="Valor total do emprestimo"
                                   />
                                   <Button
                                     type="button"
                                     size="sm"
                                     onClick={() => updateLoanTotalValue(selectedLoan.id)}
-                                    className="h-11 rounded-full px-5"
+                                    className="h-11 w-full rounded-full px-5 sm:w-fit"
                                   >
                                     Recalcular
                                   </Button>
