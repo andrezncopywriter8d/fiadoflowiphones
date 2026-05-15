@@ -3077,16 +3077,66 @@ function LojaDeIphonePage() {
       return;
     }
 
-    const delta = Number((nextValue - installment.valor).toFixed(2));
+    const totalProgrammed =
+      sale.totalProgramado ??
+      sale.parcelasAgenda?.reduce((acc, current) => acc + current.valor, 0) ??
+      0;
+    const lockedInstallments =
+      sale.parcelasAgenda?.filter(
+        (current) => current.status === "pago" && current.id !== installmentId,
+      ) ?? [];
+    const lockedTotal = lockedInstallments.reduce((acc, current) => acc + current.valor, 0);
+    const availableForSelectedAndFuture = Number((totalProgrammed - lockedTotal).toFixed(2));
+
+    if (nextValue > availableForSelectedAndFuture) {
+      toast.error("Esse valor passa do saldo restante do emprestimo");
+      return;
+    }
+
+    const hasFutureOpenInstallments = Boolean(
+      sale.parcelasAgenda?.some(
+        (current) => current.status !== "pago" && current.numero > installment.numero,
+      ),
+    );
+    if (!hasFutureOpenInstallments && nextValue !== availableForSelectedAndFuture) {
+      toast.error("Essa e a ultima parcela em aberto, ela precisa fechar o saldo restante");
+      return;
+    }
+
+    const openBefore =
+      sale.parcelasAgenda
+        ?.filter((current) => current.status !== "pago")
+        .reduce((acc, current) => acc + current.valor, 0) ?? 0;
 
     setSales((items) =>
       items.map((item) => {
         if (item.id !== saleId || !item.parcelasAgenda?.length) return item;
 
-        const nextAgenda = item.parcelasAgenda.map((current) =>
-          current.id === installmentId ? { ...current, valor: nextValue } : current,
+        const futureOpenInstallments = item.parcelasAgenda.filter(
+          (current) => current.status !== "pago" && current.numero > installment.numero,
         );
-        const nextTotalProgrammed = nextAgenda.reduce((acc, current) => acc + current.valor, 0);
+        const remainingForFuture = Number((totalProgrammed - lockedTotal - nextValue).toFixed(2));
+        const baseFutureValue =
+          futureOpenInstallments.length > 0
+            ? Number((remainingForFuture / futureOpenInstallments.length).toFixed(2))
+            : 0;
+        const futureCorrection = Number(
+          (remainingForFuture - baseFutureValue * futureOpenInstallments.length).toFixed(2),
+        );
+        const lastFutureId = futureOpenInstallments.at(-1)?.id;
+
+        const nextAgenda = item.parcelasAgenda.map((current) => {
+          if (current.id === installmentId) return { ...current, valor: nextValue };
+          if (current.status !== "pago" && current.numero > installment.numero) {
+            return {
+              ...current,
+              valor: Number(
+                (baseFutureValue + (current.id === lastFutureId ? futureCorrection : 0)).toFixed(2),
+              ),
+            };
+          }
+          return current;
+        });
         const nextOpenTotal = nextAgenda
           .filter((current) => current.status !== "pago")
           .reduce((acc, current) => acc + current.valor, 0);
@@ -3094,35 +3144,58 @@ function LojaDeIphonePage() {
         return {
           ...item,
           parcelasAgenda: nextAgenda,
-          totalProgramado: nextTotalProgrammed,
-          unitario: nextTotalProgrammed,
-          entrada: Math.max(nextTotalProgrammed - nextOpenTotal, 0),
+          totalProgramado: totalProgrammed,
+          unitario: totalProgrammed,
+          entrada: Math.max(totalProgrammed - nextOpenTotal, 0),
           status: nextOpenTotal <= 0 ? "Pago" : item.status === "Pago" ? "Parcial" : item.status,
         };
       }),
     );
 
-    if (installment.status !== "pago" && delta !== 0) {
+    const openAfter =
+      (sale.parcelasAgenda ?? [])
+        .map((current) => {
+          if (current.id === installmentId) return { ...current, valor: nextValue };
+          if (current.status !== "pago" && current.numero > installment.numero) {
+            const futureCount =
+              sale.parcelasAgenda?.filter(
+                (item) => item.status !== "pago" && item.numero > installment.numero,
+              ).length ?? 0;
+            const remainingForFuture = Number(
+              (totalProgrammed - lockedTotal - nextValue).toFixed(2),
+            );
+            return {
+              ...current,
+              valor: futureCount > 0 ? Number((remainingForFuture / futureCount).toFixed(2)) : 0,
+            };
+          }
+          return current;
+        })
+        .filter((current) => current.status !== "pago")
+        .reduce((acc, current) => acc + current.valor, 0) ?? 0;
+    const openDelta = Number((openAfter - openBefore).toFixed(2));
+
+    if (openDelta !== 0) {
       setClients((items) =>
         items.map((client) =>
           client.nome === sale.cliente
-            ? { ...client, aberto: Math.max(client.aberto + delta, 0) }
+            ? { ...client, aberto: Math.max(client.aberto + openDelta, 0) }
             : client,
         ),
       );
     }
 
-    if (installment.status === "pago" && delta !== 0) {
+    if (installment.status === "pago" && nextValue !== installment.valor) {
       setPayments((items) => [
         {
           id: Date.now() + installmentId,
           cliente: sale.cliente,
           venda: `${sale.item} - ajuste parcela ${installment.numero}/${sale.parcelas}`,
-          valor: delta,
+          valor: Number((nextValue - installment.valor).toFixed(2)),
           forma: "Ajuste de emprestimo",
           data: today,
           observacoes:
-            delta > 0
+            nextValue > installment.valor
               ? "Valor extra registrado em parcela ja paga."
               : "Valor de parcela paga reduzido manualmente.",
         },
@@ -3130,9 +3203,7 @@ function LojaDeIphonePage() {
       ]);
     }
 
-    toast.success(
-      `Parcela ${installment.numero} atualizada de ${brl(installment.valor)} para ${brl(nextValue)}`,
-    );
+    toast.success(`Parcela ${installment.numero} atualizada e proximas parcelas recalculadas`);
   }
 
   function removeById<T extends { id: number }>(
@@ -4718,6 +4789,10 @@ function LojaDeIphonePage() {
                         </div>
 
                         <div className="mt-4 grid gap-2">
+                          <p className="px-1 text-xs text-muted-foreground">
+                            Altere o valor de uma parcela e clique em Recalcular para redistribuir
+                            automaticamente o saldo nas proximas parcelas em aberto.
+                          </p>
                           {(selectedLoan.parcelasAgenda ?? []).map((installment) => {
                             const paid = installment.status === "pago";
                             return (
@@ -4760,7 +4835,7 @@ function LojaDeIphonePage() {
                                   className="rounded-full"
                                   variant="outline"
                                 >
-                                  Salvar valor
+                                  Recalcular
                                 </Button>
                                 <Button
                                   type="button"
