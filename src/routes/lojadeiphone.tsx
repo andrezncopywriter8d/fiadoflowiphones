@@ -5651,9 +5651,11 @@ function StockCreatableSelect({
   customLabel?: string;
   customPlaceholder?: string;
 }) {
+  const [isCreating, setIsCreating] = useState(false);
   const cleanOptions = options.filter((option) => option !== "");
   const isCustomValue = Boolean(value) && !cleanOptions.includes(value);
-  const selectValue = isCustomValue ? customStockOption : value;
+  const showCustomInput = isCreating || isCustomValue;
+  const selectValue = showCustomInput ? customStockOption : value;
 
   return (
     <div className="grid gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
@@ -5666,7 +5668,14 @@ function StockCreatableSelect({
           value={selectValue}
           onChange={(event) => {
             const nextValue = event.target.value;
-            onChange(nextValue === customStockOption ? "" : nextValue);
+            if (nextValue === customStockOption) {
+              setIsCreating(true);
+              onChange("");
+              return;
+            }
+
+            setIsCreating(false);
+            onChange(nextValue);
           }}
           className="h-10 min-w-0 rounded-xl border border-border bg-surface-muted px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
         >
@@ -5678,12 +5687,15 @@ function StockCreatableSelect({
           ))}
           <option value={customStockOption}>{customLabel}</option>
         </select>
-        {(selectValue === customStockOption || isCustomValue) && (
+        {showCustomInput && (
           <Input
             autoFocus
-            value={isCustomValue ? value : ""}
+            value={value}
             placeholder={customPlaceholder}
-            onChange={(event) => onChange(event.target.value)}
+            onChange={(event) => {
+              setIsCreating(true);
+              onChange(event.target.value);
+            }}
             className="h-10 min-w-0 rounded-xl border-primary/25 bg-primary/5 text-sm"
           />
         )}
