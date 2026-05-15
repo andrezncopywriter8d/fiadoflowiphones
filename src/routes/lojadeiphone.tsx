@@ -1268,6 +1268,7 @@ function LojaDeIphonePage() {
   const [stockProductOpen, setStockProductOpen] = useState(false);
   const [formModal, setFormModal] = useState<null | "service" | "client" | "sale" | "loan">(null);
   const [selectedLoanId, setSelectedLoanId] = useState<number | null>(null);
+  const [loanInstallmentDrafts, setLoanInstallmentDrafts] = useState<Record<number, string>>({});
   const [imeiQuery, setImeiQuery] = useState("");
   const [imeiApiKey, setImeiApiKey] = useState(() =>
     typeof window === "undefined" ? "" : localStorage.getItem("fiado-imei-api-key") || "",
@@ -1481,6 +1482,26 @@ function LojaDeIphonePage() {
     };
   }, [clients, dashboardDate, parts, payments, phones, sales, services]);
 
+  const selectedLoan = selectedLoanId
+    ? sales.find((item) => item.id === selectedLoanId && item.modalidade === "emprestimo")
+    : null;
+
+  useEffect(() => {
+    if (!selectedLoan?.parcelasAgenda?.length) {
+      setLoanInstallmentDrafts({});
+      return;
+    }
+
+    setLoanInstallmentDrafts(
+      Object.fromEntries(
+        selectedLoan.parcelasAgenda.map((installment) => [
+          installment.id,
+          installment.valor.toFixed(2),
+        ]),
+      ),
+    );
+  }, [selectedLoan?.id, selectedLoan?.parcelasAgenda]);
+
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
@@ -1549,9 +1570,6 @@ function LojaDeIphonePage() {
         item.status,
       ),
   );
-  const selectedLoan = selectedLoanId
-    ? sales.find((item) => item.id === selectedLoanId && item.modalidade === "emprestimo")
-    : null;
   const saleStockOptions: SaleStockOption[] = [
     ...phones
       .filter((phone) => phone.status.startsWith("Dispon"))
@@ -3041,6 +3059,80 @@ function LojaDeIphonePage() {
       ),
     );
     toast.success(`Parcela ${selectedInstallment.numero} marcada como paga`);
+  }
+
+  function updateLoanInstallmentValue(saleId: number, installmentId: number) {
+    const sale = sales.find((item) => item.id === saleId);
+    const draftValue = loanInstallmentDrafts[installmentId];
+    const nextValue = moneyToNumber(draftValue ?? "");
+    const installment = sale?.parcelasAgenda?.find((item) => item.id === installmentId);
+
+    if (!sale || !installment) {
+      toast.error("Parcela nao encontrada");
+      return;
+    }
+
+    if (nextValue <= 0) {
+      toast.error("Informe um valor maior que zero");
+      return;
+    }
+
+    const delta = Number((nextValue - installment.valor).toFixed(2));
+
+    setSales((items) =>
+      items.map((item) => {
+        if (item.id !== saleId || !item.parcelasAgenda?.length) return item;
+
+        const nextAgenda = item.parcelasAgenda.map((current) =>
+          current.id === installmentId ? { ...current, valor: nextValue } : current,
+        );
+        const nextTotalProgrammed = nextAgenda.reduce((acc, current) => acc + current.valor, 0);
+        const nextOpenTotal = nextAgenda
+          .filter((current) => current.status !== "pago")
+          .reduce((acc, current) => acc + current.valor, 0);
+
+        return {
+          ...item,
+          parcelasAgenda: nextAgenda,
+          totalProgramado: nextTotalProgrammed,
+          unitario: nextTotalProgrammed,
+          entrada: Math.max(nextTotalProgrammed - nextOpenTotal, 0),
+          status: nextOpenTotal <= 0 ? "Pago" : item.status === "Pago" ? "Parcial" : item.status,
+        };
+      }),
+    );
+
+    if (installment.status !== "pago" && delta !== 0) {
+      setClients((items) =>
+        items.map((client) =>
+          client.nome === sale.cliente
+            ? { ...client, aberto: Math.max(client.aberto + delta, 0) }
+            : client,
+        ),
+      );
+    }
+
+    if (installment.status === "pago" && delta !== 0) {
+      setPayments((items) => [
+        {
+          id: Date.now() + installmentId,
+          cliente: sale.cliente,
+          venda: `${sale.item} - ajuste parcela ${installment.numero}/${sale.parcelas}`,
+          valor: delta,
+          forma: "Ajuste de emprestimo",
+          data: today,
+          observacoes:
+            delta > 0
+              ? "Valor extra registrado em parcela ja paga."
+              : "Valor de parcela paga reduzido manualmente.",
+        },
+        ...items,
+      ]);
+    }
+
+    toast.success(
+      `Parcela ${installment.numero} atualizada de ${brl(installment.valor)} para ${brl(nextValue)}`,
+    );
   }
 
   function removeById<T extends { id: number }>(
@@ -4631,7 +4723,7 @@ function LojaDeIphonePage() {
                             return (
                               <div
                                 key={installment.id}
-                                className={`grid gap-3 rounded-2xl border p-3 sm:grid-cols-[1fr_130px_120px_120px] sm:items-center ${
+                                className={`grid gap-3 rounded-2xl border p-3 sm:grid-cols-[1fr_150px_110px_128px_120px] sm:items-center ${
                                   paid
                                     ? "border-success/20 bg-success/5"
                                     : "border-border bg-surface-muted/50"
@@ -4646,10 +4738,30 @@ function LojaDeIphonePage() {
                                     Vencimento {installment.vencimento}
                                   </p>
                                 </div>
-                                <p className="text-sm font-semibold text-foreground">
-                                  {brl(installment.valor)}
-                                </p>
+                                <Input
+                                  value={loanInstallmentDrafts[installment.id] ?? ""}
+                                  inputMode="decimal"
+                                  onChange={(event) =>
+                                    setLoanInstallmentDrafts((drafts) => ({
+                                      ...drafts,
+                                      [installment.id]: event.target.value,
+                                    }))
+                                  }
+                                  className="h-10 rounded-2xl bg-surface"
+                                  aria-label={`Valor da parcela ${installment.numero}`}
+                                />
                                 <StatusPill status={paid ? "Pago" : "Em aberto"} />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() =>
+                                    updateLoanInstallmentValue(selectedLoan.id, installment.id)
+                                  }
+                                  className="rounded-full"
+                                  variant="outline"
+                                >
+                                  Salvar valor
+                                </Button>
                                 <Button
                                   type="button"
                                   size="sm"
