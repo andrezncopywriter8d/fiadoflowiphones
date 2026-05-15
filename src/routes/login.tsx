@@ -1,5 +1,5 @@
 import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
@@ -11,6 +11,9 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
+const AUTH_RATE_LIMIT_SECONDS = 60;
+const AUTH_RATE_LIMIT_KEY = "fiado-auth-rate-limit-until";
+
 function LoginPage() {
   const { session, loading } = useAuth();
   const navigate = useNavigate();
@@ -19,33 +22,95 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [nome, setNome] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [rateLimitUntil, setRateLimitUntil] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return Number(window.localStorage.getItem(AUTH_RATE_LIMIT_KEY)) || 0;
+  });
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const rateLimitSecondsLeft = useMemo(
+    () => Math.max(0, Math.ceil((rateLimitUntil - now) / 1000)),
+    [now, rateLimitUntil],
+  );
 
   if (!loading && session) return <Navigate to="/" />;
 
+  function startRateLimit(seconds = AUTH_RATE_LIMIT_SECONDS) {
+    const until = Date.now() + seconds * 1000;
+    setRateLimitUntil(until);
+    window.localStorage.setItem(AUTH_RATE_LIMIT_KEY, String(until));
+  }
+
+  function showAuthError(err: unknown) {
+    const message = err instanceof Error ? err.message : "Erro ao autenticar";
+    const normalized = message.toLowerCase();
+
+    if (
+      normalized.includes("email rate limit") ||
+      normalized.includes("rate limit") ||
+      normalized.includes("too many requests")
+    ) {
+      startRateLimit();
+      toast.error("Muitas tentativas em pouco tempo. Aguarde 1 minuto e tente novamente.");
+      return;
+    }
+
+    if (normalized.includes("invalid login credentials")) {
+      toast.error("E-mail ou senha incorretos.");
+      return;
+    }
+
+    if (normalized.includes("password should be at least")) {
+      toast.error("Use uma senha com pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (normalized.includes("user already registered")) {
+      toast.error("Esse e-mail já tem conta. Entre usando a senha cadastrada.");
+      return;
+    }
+
+    toast.error(message);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (rateLimitSecondsLeft > 0) {
+      toast.error(`Aguarde ${rateLimitSecondsLeft}s antes de tentar novamente.`);
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const cleanEmail = email.trim().toLowerCase();
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
-          email,
+          email: cleanEmail,
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: { nome },
+            data: { nome: nome.trim() },
           },
         });
         if (error) throw error;
         toast.success("Conta criada! Você já está conectado.");
         navigate({ to: "/" });
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
         if (error) throw error;
         toast.success("Bem-vindo de volta!");
         navigate({ to: "/" });
       }
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Erro ao autenticar");
+      showAuthError(err);
     } finally {
       setSubmitting(false);
     }
@@ -103,11 +168,13 @@ function LoginPage() {
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || rateLimitSecondsLeft > 0}
             className="mt-3 inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : rateLimitSecondsLeft > 0 ? (
+              `Aguarde ${rateLimitSecondsLeft}s`
             ) : (
               <>
                 {mode === "login" ? "Entrar" : "Criar conta"}
