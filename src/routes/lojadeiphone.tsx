@@ -24,6 +24,7 @@ import {
   LogOut,
   Package,
   PenLine,
+  Pencil,
   Plus,
   Search,
   Settings,
