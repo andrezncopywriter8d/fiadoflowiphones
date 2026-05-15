@@ -237,6 +237,7 @@ type SalePaymentEntry = {
 
 type LoanForm = {
   cliente: string;
+  itemKey: string;
   item: string;
   valor: string;
   entrada: string;
@@ -1369,6 +1370,7 @@ function LojaDeIphonePage() {
   const [salePayments, setSalePayments] = useState<SalePaymentEntry[]>([]);
   const [newLoan, setNewLoan] = useState<LoanForm>({
     cliente: "",
+    itemKey: "",
     item: "",
     valor: "",
     entrada: "",
@@ -1655,6 +1657,8 @@ function LojaDeIphonePage() {
   const selectedSaleStockOption = saleStockOptions.find(
     (option) => option.key === saleItemDraft.productKey,
   );
+  const loanStockOptions = saleStockOptions.filter((option) => option.kind !== "service");
+  const selectedLoanStockOption = loanStockOptions.find((option) => option.key === newLoan.itemKey);
   const saleTotals = {
     gross: saleItems.reduce((acc, item) => acc + item.price * item.quantity, 0),
     discount: saleItems.reduce((acc, item) => acc + item.discount, 0),
@@ -2942,8 +2946,13 @@ function LojaDeIphonePage() {
       return;
     }
 
-    if (!newLoan.item || value <= 0) {
+    if (!selectedLoanStockOption || !newLoan.item || value <= 0) {
       toast.error("Informe a peca ou celular emprestado e o valor");
+      return;
+    }
+
+    if (selectedLoanStockOption.available <= 0) {
+      toast.error("Esse item esta sem estoque para emprestimo");
       return;
     }
 
@@ -2966,13 +2975,16 @@ function LojaDeIphonePage() {
             total: programmedTotal,
           })
         : undefined;
-    const linkedPhone = phones.find((phone) => newLoan.item.includes(phone.modelo));
-    const loanKind = linkedPhone ? "Celular" : "Peça";
+    const linkedPhone =
+      selectedLoanStockOption.kind === "phone"
+        ? phones.find((phone) => phone.id === selectedLoanStockOption.sourceId)
+        : undefined;
+    const loanKind = selectedLoanStockOption.kind === "phone" ? "Celular" : "Peça";
     const sale: Sale = {
       id: Date.now(),
       cliente: selectedClient.nome,
       tipo: loanKind,
-      item: newLoan.item,
+      item: selectedLoanStockOption.title,
       quantidade: 1,
       unitario: value + (programmedTotal - balance),
       desconto: 0,
@@ -3009,7 +3021,7 @@ function LojaDeIphonePage() {
     }
     setParts((items) =>
       items.map((part) =>
-        sale.item.includes(part.tipo) && sale.item.includes(part.modelo)
+        selectedLoanStockOption.kind === "part" && part.id === selectedLoanStockOption.sourceId
           ? {
               ...part,
               quantidade: Math.max(part.quantidade - 1, 0),
@@ -3030,6 +3042,7 @@ function LojaDeIphonePage() {
     }
     setNewLoan({
       cliente: "",
+      itemKey: "",
       item: "",
       valor: "",
       entrada: "",
@@ -4618,13 +4631,45 @@ function LojaDeIphonePage() {
                           </div>
                           <div className="space-y-1.5 lg:col-span-3">
                             <Label>Nome do item emprestado</Label>
-                            <Input
-                              placeholder="Ex: Bateria iPhone 13, Tela iPhone 11, iPhone 12 128GB"
-                              value={newLoan.item}
-                              onChange={(event) =>
-                                setNewLoan({ ...newLoan, item: event.target.value })
-                              }
-                            />
+                            <Select
+                              value={newLoan.itemKey || undefined}
+                              onValueChange={(value) => {
+                                const selected = loanStockOptions.find(
+                                  (option) => option.key === value,
+                                );
+
+                                setNewLoan({
+                                  ...newLoan,
+                                  itemKey: value,
+                                  item: selected?.title ?? "",
+                                  valor: selected ? String(selected.price) : newLoan.valor,
+                                });
+                              }}
+                              disabled={loanStockOptions.length === 0}
+                            >
+                              <SelectTrigger className="h-11 rounded-2xl border-border bg-surface px-4 text-sm shadow-soft transition hover:border-primary/35 focus:ring-2 focus:ring-primary/20 data-[placeholder]:text-muted-foreground">
+                                <SelectValue placeholder="Selecionar item do estoque" />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-72 overflow-y-auto rounded-2xl border-border bg-surface p-1 shadow-float">
+                                {loanStockOptions.map((option) => (
+                                  <SelectItem
+                                    key={option.key}
+                                    value={option.key}
+                                    className="rounded-xl px-3 py-2.5 text-sm font-medium focus:bg-primary focus:text-primary-foreground"
+                                  >
+                                    <div className="flex flex-col gap-0.5">
+                                      <span>{option.title}</span>
+                                      <span className="text-xs opacity-70">{option.subtitle}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {loanStockOptions.length === 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Cadastre um item no estoque antes de registrar emprestimo.
+                              </p>
+                            )}
                           </div>
                           <div className="space-y-1.5 lg:col-span-2">
                             <Label>Valor</Label>
