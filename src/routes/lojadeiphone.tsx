@@ -44,6 +44,13 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -4242,20 +4249,26 @@ function LojaDeIphonePage() {
                         <div className="grid gap-4 lg:grid-cols-12">
                           <div className="space-y-1.5 lg:col-span-3">
                             <Label>Cliente</Label>
-                            <select
-                              value={newLoan.cliente}
-                              onChange={(event) =>
-                                setNewLoan({ ...newLoan, cliente: event.target.value })
-                              }
-                              className="h-11 w-full min-w-0 rounded-2xl border border-border bg-surface-muted px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            <Select
+                              value={newLoan.cliente || undefined}
+                              onValueChange={(value) => setNewLoan({ ...newLoan, cliente: value })}
+                              disabled={clients.length === 0}
                             >
-                              <option value="">Selecionar cliente cadastrado</option>
-                              {clients.map((client) => (
-                                <option key={client.id} value={client.nome}>
-                                  {client.nome}
-                                </option>
-                              ))}
-                            </select>
+                              <SelectTrigger className="h-11 rounded-2xl border-border bg-surface-muted px-4 text-sm shadow-soft transition hover:border-primary/35 hover:bg-surface focus:ring-2 focus:ring-primary/20 data-[placeholder]:text-muted-foreground">
+                                <SelectValue placeholder="Selecionar cliente cadastrado" />
+                              </SelectTrigger>
+                              <SelectContent className="overflow-hidden rounded-2xl border-border bg-surface p-1 shadow-float">
+                                {clients.map((client) => (
+                                  <SelectItem
+                                    key={client.id}
+                                    value={client.nome}
+                                    className="rounded-xl px-3 py-2.5 text-sm font-medium focus:bg-primary focus:text-primary-foreground"
+                                  >
+                                    {client.nome}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             {clients.length === 0 && (
                               <p className="text-xs text-muted-foreground">
                                 Cadastre um cliente antes de registrar emprestimo.
