@@ -1152,6 +1152,7 @@ function LojaDeIphonePage() {
   }>(null);
   const [stockProductOpen, setStockProductOpen] = useState(false);
   const [formModal, setFormModal] = useState<null | "service" | "client" | "sale" | "loan">(null);
+  const [selectedLoanId, setSelectedLoanId] = useState<number | null>(null);
   const [imeiQuery, setImeiQuery] = useState("");
   const [imeiApiKey, setImeiApiKey] = useState(() =>
     typeof window === "undefined" ? "" : localStorage.getItem("fiado-imei-api-key") || "",
@@ -1405,6 +1406,9 @@ function LojaDeIphonePage() {
         item.status,
       ),
   );
+  const selectedLoan = selectedLoanId
+    ? sales.find((item) => item.id === selectedLoanId && item.modalidade === "emprestimo")
+    : null;
   const saleStockOptions: SaleStockOption[] = [
     ...phones
       .filter((phone) => phone.status.startsWith("Dispon"))
@@ -2838,14 +2842,19 @@ function LojaDeIphonePage() {
     toast.success("Emprestimo registrado e cobrancas programadas");
   }
 
-  function validateLoanPayment(saleId: number) {
+  function validateLoanPayment(saleId: number, installmentId?: number) {
     const sale = sales.find((item) => item.id === saleId);
-    const nextInstallment = sale?.parcelasAgenda?.find(
-      (installment) => installment.status !== "pago",
-    );
+    const selectedInstallment = installmentId
+      ? sale?.parcelasAgenda?.find((installment) => installment.id === installmentId)
+      : sale?.parcelasAgenda?.find((installment) => installment.status !== "pago");
 
-    if (!sale || !nextInstallment) {
+    if (!sale || !selectedInstallment) {
       toast.error("Nenhuma parcela pendente para validar");
+      return;
+    }
+
+    if (selectedInstallment.status === "pago") {
+      toast.error("Essa parcela já está paga");
       return;
     }
 
@@ -2853,7 +2862,7 @@ function LojaDeIphonePage() {
       items.map((item) => {
         if (item.id !== saleId || !item.parcelasAgenda?.length) return item;
         const nextAgenda = item.parcelasAgenda.map((installment) =>
-          installment.id === nextInstallment.id
+          installment.id === selectedInstallment.id
             ? { ...installment, status: "pago" as const }
             : installment,
         );
@@ -2871,10 +2880,10 @@ function LojaDeIphonePage() {
     );
     setPayments((items) => [
       {
-        id: Date.now() + nextInstallment.id,
+        id: Date.now() + selectedInstallment.id,
         cliente: sale.cliente,
-        venda: `${sale.item} - parcela ${nextInstallment.numero}/${sale.parcelas}`,
-        valor: nextInstallment.valor,
+        venda: `${sale.item} - parcela ${selectedInstallment.numero}/${sale.parcelas}`,
+        valor: selectedInstallment.valor,
         forma: "Emprestimo",
         data: today,
         observacoes: "Pagamento de emprestimo validado.",
@@ -2884,11 +2893,11 @@ function LojaDeIphonePage() {
     setClients((items) =>
       items.map((client) =>
         client.nome === sale.cliente
-          ? { ...client, aberto: Math.max(client.aberto - nextInstallment.valor, 0) }
+          ? { ...client, aberto: Math.max(client.aberto - selectedInstallment.valor, 0) }
           : client,
       ),
     );
-    toast.success("Pagamento do emprestimo validado");
+    toast.success(`Parcela ${selectedInstallment.numero} marcada como paga`);
   }
 
   function removeById<T extends { id: number }>(
@@ -4397,7 +4406,14 @@ function LojaDeIphonePage() {
                         (installment) => installment.status !== "pago",
                       );
                       return [
-                        sale.cliente,
+                        <button
+                          key="cliente"
+                          type="button"
+                          onClick={() => setSelectedLoanId(sale.id)}
+                          className="text-left font-semibold text-primary underline-offset-4 transition hover:underline"
+                        >
+                          {sale.cliente}
+                        </button>,
                         sale.item,
                         `${sale.parcelasAgenda?.filter((installment) => installment.status === "pago").length ?? 0}/${sale.parcelas}`,
                         brl(sale.totalProgramado ?? 0),
@@ -4422,6 +4438,89 @@ function LojaDeIphonePage() {
                     })}
                   />
                 </DataCard>
+
+                <Dialog
+                  open={Boolean(selectedLoan)}
+                  onOpenChange={(open) => !open && setSelectedLoanId(null)}
+                >
+                  <DialogContent className="clean-scrollbar max-h-[90vh] w-[calc(100vw-32px)] overflow-y-auto overflow-x-hidden border-white/70 bg-surface p-0 shadow-float sm:max-w-[880px] sm:rounded-2xl">
+                    {selectedLoan && (
+                      <ModuleCard
+                        title={`Parcelas de ${selectedLoan.cliente}`}
+                        icon={Wallet}
+                        action={
+                          <Button
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() => setSelectedLoanId(null)}
+                          >
+                            Fechar
+                          </Button>
+                        }
+                      >
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <MiniMetric
+                            title="Item emprestado"
+                            value={selectedLoan.item}
+                            icon={Package}
+                          />
+                          <MiniMetric
+                            title="Total programado"
+                            value={brl(selectedLoan.totalProgramado ?? 0)}
+                            icon={BadgeDollarSign}
+                          />
+                          <MiniMetric
+                            title="Parcelas pagas"
+                            value={`${selectedLoan.parcelasAgenda?.filter((installment) => installment.status === "pago").length ?? 0}/${selectedLoan.parcelas}`}
+                            icon={CheckCircle2}
+                          />
+                        </div>
+
+                        <div className="mt-4 grid gap-2">
+                          {(selectedLoan.parcelasAgenda ?? []).map((installment) => {
+                            const paid = installment.status === "pago";
+                            return (
+                              <div
+                                key={installment.id}
+                                className={`grid gap-3 rounded-2xl border p-3 sm:grid-cols-[1fr_130px_120px_120px] sm:items-center ${
+                                  paid
+                                    ? "border-success/20 bg-success/5"
+                                    : "border-border bg-surface-muted/50"
+                                }`}
+                              >
+                                <div>
+                                  <p className="font-semibold text-foreground">
+                                    Parcela {String(installment.numero).padStart(2, "0")}/
+                                    {String(selectedLoan.parcelas).padStart(2, "0")}
+                                  </p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Vencimento {installment.vencimento}
+                                  </p>
+                                </div>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {brl(installment.valor)}
+                                </p>
+                                <StatusPill status={paid ? "Pago" : "Em aberto"} />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={paid}
+                                  onClick={() =>
+                                    validateLoanPayment(selectedLoan.id, installment.id)
+                                  }
+                                  className="rounded-full"
+                                  variant={paid ? "outline" : "default"}
+                                >
+                                  {paid ? "Pago" : "Marcar pago"}
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ModuleCard>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </>
             )}
 
