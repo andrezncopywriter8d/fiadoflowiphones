@@ -202,6 +202,7 @@ type Sale = {
   jurosMensal?: number;
   diaCobranca?: number;
   frequenciaCobranca?: "semanal" | "mensal";
+  valorTotalEmprestimo?: number;
   totalProgramado?: number;
   parcelasAgenda?: LoanInstallment[];
 };
@@ -250,8 +251,10 @@ type LoanInstallment = {
   id: number;
   numero: number;
   vencimento: string;
-  valor: number;
-  status: "pendente" | "pago" | "vencido";
+  valor?: number;
+  valorProgramado?: number;
+  valorPago?: number;
+  status: "em_aberto" | "pago" | "parcial" | "atrasado" | "pendente" | "vencido";
 };
 
 type AiCatalogPart = {
@@ -429,9 +432,36 @@ function saveLocalLojaBusiness(userId: string, state: LojaBusinessState) {
 
 function normalizeLojaBusinessState(value: unknown): LojaBusinessState {
   const state = (value ?? {}) as Partial<LojaBusinessState>;
+  const sales = Array.isArray(state.sales)
+    ? state.sales.map((sale) => {
+        if (sale?.modalidade !== "emprestimo" || !Array.isArray(sale.parcelasAgenda)) return sale;
+        const parcelasAgenda = normalizeLoanAgenda(sale.parcelasAgenda);
+        const valorTotalEmprestimo =
+          sale.valorTotalEmprestimo ??
+          sale.totalProgramado ??
+          parcelasAgenda.reduce(
+            (acc, installment) => acc + getInstallmentProgrammed(installment),
+            0,
+          );
+        const summary = getLoanSummary({
+          ...sale,
+          valorTotalEmprestimo,
+          totalProgramado: valorTotalEmprestimo,
+          parcelasAgenda,
+        } as Sale);
+        return {
+          ...sale,
+          valorTotalEmprestimo,
+          totalProgramado: valorTotalEmprestimo,
+          parcelasAgenda: summary.agenda,
+          entrada: summary.paid,
+          status: summary.status,
+        };
+      })
+    : [];
   return {
     clients: Array.isArray(state.clients) ? state.clients : [],
-    sales: Array.isArray(state.sales) ? state.sales : [],
+    sales,
     payments: Array.isArray(state.payments) ? state.payments : [],
   };
 }
@@ -1269,6 +1299,7 @@ function LojaDeIphonePage() {
   const [formModal, setFormModal] = useState<null | "service" | "client" | "sale" | "loan">(null);
   const [selectedLoanId, setSelectedLoanId] = useState<number | null>(null);
   const [loanInstallmentDrafts, setLoanInstallmentDrafts] = useState<Record<number, string>>({});
+  const [loanTotalDraft, setLoanTotalDraft] = useState("");
   const [imeiQuery, setImeiQuery] = useState("");
   const [imeiApiKey, setImeiApiKey] = useState(() =>
     typeof window === "undefined" ? "" : localStorage.getItem("fiado-imei-api-key") || "",
@@ -1485,22 +1516,26 @@ function LojaDeIphonePage() {
   const selectedLoan = selectedLoanId
     ? sales.find((item) => item.id === selectedLoanId && item.modalidade === "emprestimo")
     : null;
+  const selectedLoanSummary = selectedLoan ? getLoanSummary(selectedLoan) : null;
 
   useEffect(() => {
     if (!selectedLoan?.parcelasAgenda?.length) {
       setLoanInstallmentDrafts({});
+      setLoanTotalDraft("");
       return;
     }
 
+    const normalizedAgenda = normalizeLoanAgenda(selectedLoan.parcelasAgenda);
+    setLoanTotalDraft(getLoanTotal(selectedLoan).toFixed(2));
     setLoanInstallmentDrafts(
       Object.fromEntries(
-        selectedLoan.parcelasAgenda.map((installment) => [
+        normalizedAgenda.map((installment) => [
           installment.id,
-          installment.valor.toFixed(2),
+          getInstallmentPaid(installment).toFixed(2),
         ]),
       ),
     );
-  }, [selectedLoan?.id, selectedLoan?.parcelasAgenda]);
+  }, [selectedLoan]);
 
   if (loading) {
     return (
@@ -1655,7 +1690,10 @@ function LojaDeIphonePage() {
           tipo: sale.tipo,
           status: installment.vencimento < today ? "Atrasado" : sale.status,
           vencimento: installment.vencimento,
-          aberto: installment.valor,
+          aberto: Math.max(
+            getInstallmentProgrammed(installment) - getInstallmentPaid(installment),
+            0,
+          ),
           atraso: installment.vencimento < today,
         }));
     }
@@ -2746,6 +2784,7 @@ function LojaDeIphonePage() {
       modalidade: modality,
       diaCobranca: chargeDay,
       frequenciaCobranca: modality === "emprestimo" ? newSale.frequenciaCobranca : "mensal",
+      valorTotalEmprestimo: salePendingTotal,
       totalProgramado: salePendingTotal,
       parcelasAgenda: schedule,
     };
@@ -2948,6 +2987,7 @@ function LojaDeIphonePage() {
       jurosMensal: monthlyInterest,
       diaCobranca: chargeDay,
       frequenciaCobranca: newLoan.frequenciaCobranca,
+      valorTotalEmprestimo: programmedTotal,
       totalProgramado: programmedTotal,
       parcelasAgenda: schedule,
     };
@@ -3005,9 +3045,10 @@ function LojaDeIphonePage() {
 
   function validateLoanPayment(saleId: number, installmentId?: number) {
     const sale = sales.find((item) => item.id === saleId);
+    const agenda = normalizeLoanAgenda(sale?.parcelasAgenda);
     const selectedInstallment = installmentId
-      ? sale?.parcelasAgenda?.find((installment) => installment.id === installmentId)
-      : sale?.parcelasAgenda?.find((installment) => installment.status !== "pago");
+      ? agenda.find((installment) => installment.id === installmentId)
+      : agenda.find((installment) => installment.status !== "pago");
 
     if (!sale || !selectedInstallment) {
       toast.error("Nenhuma parcela pendente para validar");
@@ -3015,187 +3056,131 @@ function LojaDeIphonePage() {
     }
 
     if (selectedInstallment.status === "pago") {
-      toast.error("Essa parcela já está paga");
+      toast.error("Essa parcela ja esta paga");
       return;
     }
 
+    const programmed = getInstallmentProgrammed(selectedInstallment);
+    const paidBefore = getInstallmentPaid(selectedInstallment);
+    const paymentDelta = Number((programmed - paidBefore).toFixed(2));
+    const totalCents = numberToCents(getLoanTotal(sale));
+    const nextAgenda = recalculateLoanAgenda({
+      agenda,
+      totalCents,
+      editedInstallmentId: selectedInstallment.id,
+      editedPaidCents: numberToCents(programmed),
+    });
+    const nextSummary = getLoanSummary({
+      ...sale,
+      valorTotalEmprestimo: centsToNumber(totalCents),
+      totalProgramado: centsToNumber(totalCents),
+      parcelasAgenda: nextAgenda,
+    });
+
     setSales((items) =>
-      items.map((item) => {
-        if (item.id !== saleId || !item.parcelasAgenda?.length) return item;
-        const nextAgenda = item.parcelasAgenda.map((installment) =>
-          installment.id === selectedInstallment.id
-            ? { ...installment, status: "pago" as const }
-            : installment,
-        );
-        const paidValue = nextAgenda
-          .filter((installment) => installment.status === "pago")
-          .reduce((acc, installment) => acc + installment.valor, item.entrada);
-        const allPaid = nextAgenda.every((installment) => installment.status === "pago");
-        return {
-          ...item,
-          parcelasAgenda: nextAgenda,
-          entrada: Math.min(paidValue, item.unitario - item.desconto),
-          status: allPaid ? "Pago" : "Parcial",
-        };
-      }),
-    );
-    setPayments((items) => [
-      {
-        id: Date.now() + selectedInstallment.id,
-        cliente: sale.cliente,
-        venda: `${sale.item} - parcela ${selectedInstallment.numero}/${sale.parcelas}`,
-        valor: selectedInstallment.valor,
-        forma: "Emprestimo",
-        data: today,
-        observacoes: "Pagamento de emprestimo validado.",
-      },
-      ...items,
-    ]);
-    setClients((items) =>
-      items.map((client) =>
-        client.nome === sale.cliente
-          ? { ...client, aberto: Math.max(client.aberto - selectedInstallment.valor, 0) }
-          : client,
+      items.map((item) =>
+        item.id === saleId
+          ? {
+              ...item,
+              parcelasAgenda: nextAgenda,
+              valorTotalEmprestimo: nextSummary.total,
+              totalProgramado: nextSummary.total,
+              unitario: nextSummary.total,
+              entrada: nextSummary.paid,
+              status: nextSummary.status,
+            }
+          : item,
       ),
     );
+
+    if (paymentDelta > 0) {
+      setPayments((items) => [
+        {
+          id: Date.now() + selectedInstallment.id,
+          cliente: sale.cliente,
+          venda: `${sale.item} - parcela ${selectedInstallment.numero}/${sale.parcelas}`,
+          valor: paymentDelta,
+          forma: "Emprestimo",
+          data: today,
+          observacoes: "Pagamento de emprestimo validado.",
+        },
+        ...items,
+      ]);
+    }
+
+    setClients((items) =>
+      items.map((client) =>
+        client.nome === sale.cliente ? { ...client, aberto: nextSummary.remaining } : client,
+      ),
+    );
+    if (nextSummary.overpaid > 0) {
+      toast.warning(`Pagamento excedente de ${brl(nextSummary.overpaid)} registrado`);
+    }
     toast.success(`Parcela ${selectedInstallment.numero} marcada como paga`);
   }
 
   function updateLoanInstallmentValue(saleId: number, installmentId: number) {
     const sale = sales.find((item) => item.id === saleId);
     const draftValue = loanInstallmentDrafts[installmentId];
-    const nextValue = moneyToNumber(draftValue ?? "");
-    const installment = sale?.parcelasAgenda?.find((item) => item.id === installmentId);
+    const nextPaidCents = moneyToCents(draftValue ?? "");
+    const agenda = normalizeLoanAgenda(sale?.parcelasAgenda);
+    const installment = agenda.find((item) => item.id === installmentId);
 
     if (!sale || !installment) {
       toast.error("Parcela nao encontrada");
       return;
     }
 
-    if (nextValue <= 0) {
-      toast.error("Informe um valor maior que zero");
-      return;
-    }
-
-    const totalProgrammed =
-      sale.totalProgramado ??
-      sale.parcelasAgenda?.reduce((acc, current) => acc + current.valor, 0) ??
-      0;
-    const lockedInstallments =
-      sale.parcelasAgenda?.filter(
-        (current) => current.status === "pago" && current.id !== installmentId,
-      ) ?? [];
-    const lockedTotal = lockedInstallments.reduce((acc, current) => acc + current.valor, 0);
-    const availableForSelectedAndFuture = Number((totalProgrammed - lockedTotal).toFixed(2));
-
-    if (nextValue > availableForSelectedAndFuture) {
-      toast.error("Esse valor passa do saldo restante do emprestimo");
-      return;
-    }
-
-    const hasFutureOpenInstallments = Boolean(
-      sale.parcelasAgenda?.some(
-        (current) => current.status !== "pago" && current.numero > installment.numero,
-      ),
-    );
-    if (!hasFutureOpenInstallments && nextValue !== availableForSelectedAndFuture) {
-      toast.error("Essa e a ultima parcela em aberto, ela precisa fechar o saldo restante");
-      return;
-    }
-
-    const openBefore =
-      sale.parcelasAgenda
-        ?.filter((current) => current.status !== "pago")
-        .reduce((acc, current) => acc + current.valor, 0) ?? 0;
+    const paidBefore = getInstallmentPaid(installment);
+    const totalCents = numberToCents(getLoanTotal(sale));
+    const nextAgenda = recalculateLoanAgenda({
+      agenda,
+      totalCents,
+      editedInstallmentId: installmentId,
+      editedPaidCents: nextPaidCents,
+    });
+    const nextSummary = getLoanSummary({
+      ...sale,
+      valorTotalEmprestimo: centsToNumber(totalCents),
+      totalProgramado: centsToNumber(totalCents),
+      parcelasAgenda: nextAgenda,
+    });
 
     setSales((items) =>
-      items.map((item) => {
-        if (item.id !== saleId || !item.parcelasAgenda?.length) return item;
-
-        const futureOpenInstallments = item.parcelasAgenda.filter(
-          (current) => current.status !== "pago" && current.numero > installment.numero,
-        );
-        const remainingForFuture = Number((totalProgrammed - lockedTotal - nextValue).toFixed(2));
-        const baseFutureValue =
-          futureOpenInstallments.length > 0
-            ? Number((remainingForFuture / futureOpenInstallments.length).toFixed(2))
-            : 0;
-        const futureCorrection = Number(
-          (remainingForFuture - baseFutureValue * futureOpenInstallments.length).toFixed(2),
-        );
-        const lastFutureId = futureOpenInstallments.at(-1)?.id;
-
-        const nextAgenda = item.parcelasAgenda.map((current) => {
-          if (current.id === installmentId) return { ...current, valor: nextValue };
-          if (current.status !== "pago" && current.numero > installment.numero) {
-            return {
-              ...current,
-              valor: Number(
-                (baseFutureValue + (current.id === lastFutureId ? futureCorrection : 0)).toFixed(2),
-              ),
-            };
-          }
-          return current;
-        });
-        const nextOpenTotal = nextAgenda
-          .filter((current) => current.status !== "pago")
-          .reduce((acc, current) => acc + current.valor, 0);
-
-        return {
-          ...item,
-          parcelasAgenda: nextAgenda,
-          totalProgramado: totalProgrammed,
-          unitario: totalProgrammed,
-          entrada: Math.max(totalProgrammed - nextOpenTotal, 0),
-          status: nextOpenTotal <= 0 ? "Pago" : item.status === "Pago" ? "Parcial" : item.status,
-        };
-      }),
+      items.map((item) =>
+        item.id === saleId
+          ? {
+              ...item,
+              parcelasAgenda: nextAgenda,
+              valorTotalEmprestimo: nextSummary.total,
+              totalProgramado: nextSummary.total,
+              unitario: nextSummary.total,
+              entrada: nextSummary.paid,
+              status: nextSummary.status,
+            }
+          : item,
+      ),
     );
 
-    const openAfter =
-      (sale.parcelasAgenda ?? [])
-        .map((current) => {
-          if (current.id === installmentId) return { ...current, valor: nextValue };
-          if (current.status !== "pago" && current.numero > installment.numero) {
-            const futureCount =
-              sale.parcelasAgenda?.filter(
-                (item) => item.status !== "pago" && item.numero > installment.numero,
-              ).length ?? 0;
-            const remainingForFuture = Number(
-              (totalProgrammed - lockedTotal - nextValue).toFixed(2),
-            );
-            return {
-              ...current,
-              valor: futureCount > 0 ? Number((remainingForFuture / futureCount).toFixed(2)) : 0,
-            };
-          }
-          return current;
-        })
-        .filter((current) => current.status !== "pago")
-        .reduce((acc, current) => acc + current.valor, 0) ?? 0;
-    const openDelta = Number((openAfter - openBefore).toFixed(2));
+    setClients((items) =>
+      items.map((client) =>
+        client.nome === sale.cliente ? { ...client, aberto: nextSummary.remaining } : client,
+      ),
+    );
 
-    if (openDelta !== 0) {
-      setClients((items) =>
-        items.map((client) =>
-          client.nome === sale.cliente
-            ? { ...client, aberto: Math.max(client.aberto + openDelta, 0) }
-            : client,
-        ),
-      );
-    }
-
-    if (installment.status === "pago" && nextValue !== installment.valor) {
+    const nextPaid = centsToNumber(nextPaidCents);
+    const paymentDelta = Number((nextPaid - paidBefore).toFixed(2));
+    if (paymentDelta !== 0) {
       setPayments((items) => [
         {
           id: Date.now() + installmentId,
           cliente: sale.cliente,
           venda: `${sale.item} - ajuste parcela ${installment.numero}/${sale.parcelas}`,
-          valor: Number((nextValue - installment.valor).toFixed(2)),
+          valor: paymentDelta,
           forma: "Ajuste de emprestimo",
           data: today,
           observacoes:
-            nextValue > installment.valor
+            paymentDelta > 0
               ? "Valor extra registrado em parcela ja paga."
               : "Valor de parcela paga reduzido manualmente.",
         },
@@ -3203,9 +3188,61 @@ function LojaDeIphonePage() {
       ]);
     }
 
+    if (nextSummary.overpaid > 0) {
+      toast.warning(`Pagamento excedente de ${brl(nextSummary.overpaid)} registrado`);
+    }
     toast.success(`Parcela ${installment.numero} atualizada e proximas parcelas recalculadas`);
   }
 
+  function updateLoanTotalValue(saleId: number) {
+    const sale = sales.find((item) => item.id === saleId);
+    if (!sale?.parcelasAgenda?.length) {
+      toast.error("Emprestimo nao encontrado");
+      return;
+    }
+
+    const totalCents = moneyToCents(loanTotalDraft);
+    if (totalCents <= 0) {
+      toast.error("Informe um valor total maior que zero");
+      return;
+    }
+
+    const nextAgenda = recalculateLoanAgenda({
+      agenda: sale.parcelasAgenda,
+      totalCents,
+    });
+    const nextSummary = getLoanSummary({
+      ...sale,
+      valorTotalEmprestimo: centsToNumber(totalCents),
+      totalProgramado: centsToNumber(totalCents),
+      parcelasAgenda: nextAgenda,
+    });
+
+    setSales((items) =>
+      items.map((item) =>
+        item.id === saleId
+          ? {
+              ...item,
+              parcelasAgenda: nextAgenda,
+              valorTotalEmprestimo: nextSummary.total,
+              totalProgramado: nextSummary.total,
+              unitario: nextSummary.total,
+              entrada: nextSummary.paid,
+              status: nextSummary.status,
+            }
+          : item,
+      ),
+    );
+    setClients((items) =>
+      items.map((client) =>
+        client.nome === sale.cliente ? { ...client, aberto: nextSummary.remaining } : client,
+      ),
+    );
+    if (nextSummary.overpaid > 0) {
+      toast.warning(`Pagamento excedente de ${brl(nextSummary.overpaid)} registrado`);
+    }
+    toast.success("Valor total atualizado e parcelas em aberto recalculadas");
+  }
   function removeById<T extends { id: number }>(
     setter: React.Dispatch<React.SetStateAction<T[]>>,
     id: number,
@@ -3308,7 +3345,11 @@ function LojaDeIphonePage() {
     }
     const paidAmount =
       installmentId && sale.parcelasAgenda?.length
-        ? (sale.parcelasAgenda.find((installment) => installment.id === installmentId)?.valor ?? 0)
+        ? getInstallmentProgrammed(
+            normalizeLoanAgenda(sale.parcelasAgenda).find(
+              (installment) => installment.id === installmentId,
+            ) ?? sale.parcelasAgenda[0],
+          )
         : Math.max(sale.unitario * sale.quantidade - sale.desconto - sale.entrada, 0);
 
     setSales((items) =>
@@ -3319,20 +3360,20 @@ function LojaDeIphonePage() {
           return { ...item, status: "Pago", entrada: item.unitario - item.desconto };
         }
 
-        const nextAgenda = item.parcelasAgenda.map((installment) =>
-          installment.id === installmentId
-            ? { ...installment, status: "pago" as const }
-            : installment,
-        );
-        const paidValue = nextAgenda
-          .filter((installment) => installment.status === "pago")
-          .reduce((acc, installment) => acc + installment.valor, item.entrada);
-        const allPaid = nextAgenda.every((installment) => installment.status === "pago");
+        const normalizedAgenda = normalizeLoanAgenda(item.parcelasAgenda);
+        const target = normalizedAgenda.find((installment) => installment.id === installmentId);
+        const nextAgenda = recalculateLoanAgenda({
+          agenda: normalizedAgenda,
+          totalCents: numberToCents(getLoanTotal(item)),
+          editedInstallmentId: installmentId,
+          editedPaidCents: numberToCents(target ? getInstallmentProgrammed(target) : paidAmount),
+        });
+        const summary = getLoanSummary({ ...item, parcelasAgenda: nextAgenda });
         return {
           ...item,
           parcelasAgenda: nextAgenda,
-          entrada: Math.min(paidValue, item.unitario - item.desconto),
-          status: allPaid ? "Pago" : "Parcial",
+          entrada: summary.paid,
+          status: summary.status,
         };
       }),
     );
@@ -4459,7 +4500,8 @@ function LojaDeIphonePage() {
                                         Parcela {installment.numero}/{loanInstallmentsPreview}
                                       </p>
                                       <p className="mt-1 text-muted-foreground">
-                                        {installment.vencimento} • {brl(installment.valor)}
+                                        {installment.vencimento} •{" "}
+                                        {brl(getInstallmentProgrammed(installment))}
                                       </p>
                                     </div>
                                   ))}
@@ -4690,7 +4732,8 @@ function LojaDeIphonePage() {
                                     Parcela {installment.numero}/{loanFormInstallmentsPreview}
                                   </p>
                                   <p className="mt-1 text-muted-foreground">
-                                    {installment.vencimento} - {brl(installment.valor)}
+                                    {installment.vencimento} -{" "}
+                                    {brl(getInstallmentProgrammed(installment))}
                                   </p>
                                 </div>
                               ))}
@@ -4714,7 +4757,8 @@ function LojaDeIphonePage() {
                       "Acoes",
                     ]}
                     rows={filteredLoans.map((sale) => {
-                      const nextInstallment = sale.parcelasAgenda?.find(
+                      const loanSummary = getLoanSummary(sale);
+                      const nextInstallment = loanSummary.agenda.find(
                         (installment) => installment.status !== "pago",
                       );
                       return [
@@ -4727,10 +4771,10 @@ function LojaDeIphonePage() {
                           {sale.cliente}
                         </button>,
                         sale.item,
-                        `${sale.parcelasAgenda?.filter((installment) => installment.status === "pago").length ?? 0}/${sale.parcelas}`,
-                        brl(sale.totalProgramado ?? 0),
+                        `${loanSummary.paidInstallments}/${sale.parcelas}`,
+                        brl(loanSummary.total),
                         nextInstallment
-                          ? `${nextInstallment.vencimento} - ${brl(nextInstallment.valor)}`
+                          ? `${nextInstallment.vencimento} - ${brl(getInstallmentProgrammed(nextInstallment))}`
                           : "Quitado",
                         <StatusPill key="status" status={sale.status} />,
                         <div key="actions" className="flex flex-wrap justify-end gap-2">
@@ -4775,89 +4819,142 @@ function LojaDeIphonePage() {
                           </Button>
                         }
                       >
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <MiniMetric
-                            title="Item emprestado"
-                            value={selectedLoan.item}
-                            icon={Package}
-                          />
-                          <MiniMetric
-                            title="Total programado"
-                            value={brl(selectedLoan.totalProgramado ?? 0)}
-                            icon={BadgeDollarSign}
-                          />
-                          <MiniMetric
-                            title="Parcelas pagas"
-                            value={`${selectedLoan.parcelasAgenda?.filter((installment) => installment.status === "pago").length ?? 0}/${selectedLoan.parcelas}`}
-                            icon={CheckCircle2}
-                          />
-                        </div>
-
-                        <div className="mt-4 grid gap-2">
-                          <p className="px-1 text-xs text-muted-foreground">
-                            Altere o valor de uma parcela e clique em Recalcular para redistribuir
-                            automaticamente o saldo nas proximas parcelas em aberto.
-                          </p>
-                          {(selectedLoan.parcelasAgenda ?? []).map((installment) => {
-                            const paid = installment.status === "pago";
-                            return (
-                              <div
-                                key={installment.id}
-                                className={`grid gap-3 rounded-2xl border p-3 sm:grid-cols-[1fr_150px_110px_128px_120px] sm:items-center ${
-                                  paid
-                                    ? "border-success/20 bg-success/5"
-                                    : "border-border bg-surface-muted/50"
-                                }`}
-                              >
-                                <div>
-                                  <p className="font-semibold text-foreground">
-                                    Parcela {String(installment.numero).padStart(2, "0")}/
-                                    {String(selectedLoan.parcelas).padStart(2, "0")}
-                                  </p>
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    Vencimento {installment.vencimento}
-                                  </p>
+                        {selectedLoanSummary && (
+                          <>
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                              <MiniMetric
+                                title="Item emprestado"
+                                value={selectedLoan.item}
+                                icon={Package}
+                              />
+                              <div className="rounded-2xl bg-surface-muted p-4 shadow-soft">
+                                <Label className="text-xs text-muted-foreground">
+                                  Valor total do emprestimo
+                                </Label>
+                                <div className="mt-2 flex gap-2">
+                                  <Input
+                                    value={loanTotalDraft}
+                                    inputMode="decimal"
+                                    onChange={(event) => setLoanTotalDraft(event.target.value)}
+                                    className="h-11 rounded-2xl bg-surface text-lg font-semibold"
+                                    aria-label="Valor total do emprestimo"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => updateLoanTotalValue(selectedLoan.id)}
+                                    className="h-11 rounded-full"
+                                  >
+                                    Recalcular
+                                  </Button>
                                 </div>
-                                <Input
-                                  value={loanInstallmentDrafts[installment.id] ?? ""}
-                                  inputMode="decimal"
-                                  onChange={(event) =>
-                                    setLoanInstallmentDrafts((drafts) => ({
-                                      ...drafts,
-                                      [installment.id]: event.target.value,
-                                    }))
-                                  }
-                                  className="h-10 rounded-2xl bg-surface"
-                                  aria-label={`Valor da parcela ${installment.numero}`}
-                                />
-                                <StatusPill status={paid ? "Pago" : "Em aberto"} />
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={() =>
-                                    updateLoanInstallmentValue(selectedLoan.id, installment.id)
-                                  }
-                                  className="rounded-full"
-                                  variant="outline"
-                                >
-                                  Recalcular
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  disabled={paid}
-                                  onClick={() =>
-                                    validateLoanPayment(selectedLoan.id, installment.id)
-                                  }
-                                  className="rounded-full"
-                                  variant={paid ? "outline" : "default"}
-                                >
-                                  {paid ? "Pago" : "Marcar pago"}
-                                </Button>
                               </div>
-                            );
-                          })}
-                        </div>
+                              <MiniMetric
+                                title="Total pago"
+                                value={brl(selectedLoanSummary.paid)}
+                                icon={CheckCircle2}
+                              />
+                              <MiniMetric
+                                title="Saldo restante"
+                                value={brl(selectedLoanSummary.remaining)}
+                                icon={BadgeDollarSign}
+                              />
+                              <MiniMetric
+                                title="Parcelas pagas"
+                                value={`${selectedLoanSummary.paidInstallments}/${selectedLoan.parcelas}`}
+                                icon={CheckCircle2}
+                              />
+                            </div>
+
+                            {selectedLoanSummary.overpaid > 0 && (
+                              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+                                Pagamento excedente detectado: {brl(selectedLoanSummary.overpaid)}.
+                              </div>
+                            )}
+
+                            <div className="mt-4 grid gap-2">
+                              <p className="px-1 text-xs text-muted-foreground">
+                                Edite o valor pago em uma parcela e clique em Recalcular. O sistema
+                                mantem os pagamentos ja registrados e redistribui o saldo restante
+                                nas proximas parcelas em aberto.
+                              </p>
+                              {selectedLoanSummary.agenda.map((installment) => {
+                                const paid = installment.status === "pago";
+                                return (
+                                  <div
+                                    key={installment.id}
+                                    className={`grid gap-3 rounded-2xl border p-3 lg:grid-cols-[1fr_145px_145px_110px_128px_120px] lg:items-center ${
+                                      paid
+                                        ? "border-success/20 bg-success/5"
+                                        : installment.status === "atrasado"
+                                          ? "border-danger/20 bg-danger/5"
+                                          : "border-border bg-surface-muted/50"
+                                    }`}
+                                  >
+                                    <div>
+                                      <p className="font-semibold text-foreground">
+                                        Parcela {String(installment.numero).padStart(2, "0")}/
+                                        {String(selectedLoan.parcelas).padStart(2, "0")}
+                                      </p>
+                                      <p className="mt-1 text-xs text-muted-foreground">
+                                        Vencimento {installment.vencimento}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[11px] font-medium text-muted-foreground">
+                                        Valor programado
+                                      </p>
+                                      <p className="mt-1 font-semibold text-foreground">
+                                        {brl(getInstallmentProgrammed(installment))}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[11px] font-medium text-muted-foreground">
+                                        Valor pago
+                                      </p>
+                                      <Input
+                                        value={loanInstallmentDrafts[installment.id] ?? ""}
+                                        inputMode="decimal"
+                                        onChange={(event) =>
+                                          setLoanInstallmentDrafts((drafts) => ({
+                                            ...drafts,
+                                            [installment.id]: event.target.value,
+                                          }))
+                                        }
+                                        className="mt-1 h-10 rounded-2xl bg-surface"
+                                        aria-label={`Valor pago da parcela ${installment.numero}`}
+                                      />
+                                    </div>
+                                    <StatusPill status={statusLabelFromInstallment(installment)} />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() =>
+                                        updateLoanInstallmentValue(selectedLoan.id, installment.id)
+                                      }
+                                      className="rounded-full"
+                                      variant="outline"
+                                    >
+                                      Recalcular
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      disabled={paid}
+                                      onClick={() =>
+                                        validateLoanPayment(selectedLoan.id, installment.id)
+                                      }
+                                      className="rounded-full"
+                                      variant={paid ? "outline" : "default"}
+                                    >
+                                      {paid ? "Pago" : "Marcar pago"}
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}{" "}
                       </ModuleCard>
                     )}
                   </DialogContent>
@@ -6957,6 +7054,167 @@ function moneyToNumber(value: string) {
   return Math.max(0, Number(normalized) || 0);
 }
 
+function numberToCents(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 100);
+}
+
+function moneyToCents(value: string) {
+  return numberToCents(moneyToNumber(value));
+}
+
+function centsToNumber(value: number) {
+  return Number((value / 100).toFixed(2));
+}
+
+function getInstallmentProgrammed(installment: LoanInstallment) {
+  return installment.valorProgramado ?? installment.valor ?? 0;
+}
+
+function getInstallmentPaid(installment: LoanInstallment) {
+  return (
+    installment.valorPago ??
+    (installment.status === "pago" ? getInstallmentProgrammed(installment) : 0)
+  );
+}
+
+function resolveInstallmentStatus(
+  programmed: number,
+  paid: number,
+  dueDate: string,
+): LoanInstallment["status"] {
+  if (paid >= programmed && programmed > 0) return "pago";
+  if (paid > 0) return "parcial";
+  return dueDate < today ? "atrasado" : "em_aberto";
+}
+
+function normalizeLoanInstallment(installment: LoanInstallment): LoanInstallment {
+  const valorProgramado = getInstallmentProgrammed(installment);
+  const valorPago = getInstallmentPaid(installment);
+  return {
+    ...installment,
+    valor: valorProgramado,
+    valorProgramado,
+    valorPago,
+    status: resolveInstallmentStatus(valorProgramado, valorPago, installment.vencimento),
+  };
+}
+
+function statusLabelFromInstallment(installment: LoanInstallment): SaleStatus {
+  if (installment.status === "pago") return "Pago";
+  if (installment.status === "parcial") return "Parcial";
+  if (installment.status === "atrasado" || installment.status === "vencido") return "Atrasado";
+  return "Em aberto";
+}
+
+function normalizeLoanAgenda(agenda: LoanInstallment[] = []) {
+  return agenda.map(normalizeLoanInstallment);
+}
+
+function getLoanTotal(sale: Sale) {
+  return (
+    sale.valorTotalEmprestimo ??
+    sale.totalProgramado ??
+    sale.parcelasAgenda?.reduce((acc, current) => acc + getInstallmentProgrammed(current), 0) ??
+    0
+  );
+}
+
+function getLoanSummary(sale: Sale) {
+  const agenda = normalizeLoanAgenda(sale.parcelasAgenda);
+  const totalCents = numberToCents(getLoanTotal(sale));
+  const paidCents = agenda.reduce(
+    (acc, installment) => acc + numberToCents(getInstallmentPaid(installment)),
+    0,
+  );
+  const remainingCents = totalCents - paidCents;
+  const paidInstallments = agenda.filter((installment) => installment.status === "pago").length;
+  const overdueInstallments = agenda.filter(
+    (installment) => installment.status === "atrasado",
+  ).length;
+  return {
+    agenda,
+    total: centsToNumber(totalCents),
+    paid: centsToNumber(paidCents),
+    remaining: centsToNumber(Math.max(remainingCents, 0)),
+    overpaid: centsToNumber(Math.max(-remainingCents, 0)),
+    paidInstallments,
+    overdueInstallments,
+    status:
+      agenda.length > 0 && paidInstallments === agenda.length
+        ? ("Pago" as SaleStatus)
+        : paidCents > 0
+          ? ("Parcial" as SaleStatus)
+          : overdueInstallments > 0
+            ? ("Atrasado" as SaleStatus)
+            : ("Em aberto" as SaleStatus),
+  };
+}
+
+function recalculateLoanAgenda({
+  agenda,
+  totalCents,
+  editedInstallmentId,
+  editedPaidCents,
+}: {
+  agenda: LoanInstallment[];
+  totalCents: number;
+  editedInstallmentId?: number;
+  editedPaidCents?: number;
+}) {
+  const normalized = normalizeLoanAgenda(agenda).map((installment) => {
+    if (installment.id !== editedInstallmentId || editedPaidCents === undefined) return installment;
+    const valorPago = centsToNumber(Math.max(editedPaidCents, 0));
+    return {
+      ...installment,
+      valorPago,
+      status: resolveInstallmentStatus(
+        getInstallmentProgrammed(installment),
+        valorPago,
+        installment.vencimento,
+      ),
+    };
+  });
+  const paidCents = normalized.reduce(
+    (acc, installment) => acc + numberToCents(getInstallmentPaid(installment)),
+    0,
+  );
+  const targetInstallments = normalized.filter(
+    (installment) => getInstallmentPaid(installment) <= 0,
+  );
+  const remainingCents = Math.max(totalCents - paidCents, 0);
+  const baseCents =
+    targetInstallments.length > 0 ? Math.floor(remainingCents / targetInstallments.length) : 0;
+  const correctionCents =
+    targetInstallments.length > 0 ? remainingCents - baseCents * targetInstallments.length : 0;
+  const lastTargetId = targetInstallments.at(-1)?.id;
+
+  return normalized.map((installment) => {
+    if (!targetInstallments.some((target) => target.id === installment.id)) {
+      const valorProgramado = getInstallmentProgrammed(installment);
+      const valorPago = getInstallmentPaid(installment);
+      return {
+        ...installment,
+        valor: valorProgramado,
+        valorProgramado,
+        valorPago,
+        status: resolveInstallmentStatus(valorProgramado, valorPago, installment.vencimento),
+      };
+    }
+
+    const valorProgramado = centsToNumber(
+      baseCents + (installment.id === lastTargetId ? correctionCents : 0),
+    );
+    const valorPago = getInstallmentPaid(installment);
+    return {
+      ...installment,
+      valor: valorProgramado,
+      valorProgramado,
+      valorPago,
+      status: resolveInstallmentStatus(valorProgramado, valorPago, installment.vencimento),
+    };
+  });
+}
+
 function numericIdFromString(value: string) {
   return Math.abs(value.split("").reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) | 0, 0));
 }
@@ -7213,7 +7471,11 @@ function buildLoanSchedule({
       numero: index + 1,
       vencimento: dateToISO(dueDate),
       valor: Number((installmentValue + (index === count - 1 ? correction : 0)).toFixed(2)),
-      status: dateToISO(dueDate) < today ? "vencido" : "pendente",
+      valorProgramado: Number(
+        (installmentValue + (index === count - 1 ? correction : 0)).toFixed(2),
+      ),
+      valorPago: 0,
+      status: dateToISO(dueDate) < today ? "atrasado" : "em_aberto",
     };
   });
 }
