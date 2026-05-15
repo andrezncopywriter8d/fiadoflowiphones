@@ -54,6 +54,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { brl } from "@/lib/format";
 
 export const Route = createFileRoute("/lojadeiphone")({
@@ -390,6 +391,8 @@ type LojaBusinessState = {
 
 const lojaInventoryLocalKey = (userId: string) => `fiado:lojadeiphone:inventory:${userId}`;
 const lojaBusinessLocalKey = (userId: string) => `fiado:lojadeiphone:business:${userId}`;
+const LOJA_BUSINESS_SCOPE = "lojadeiphone-v2-business";
+const LOJA_BUSINESS_PRODUCT_SKU = "__LOJAIPHONE_V2_BUSINESS_STATE__";
 
 function readLocalLojaInventoryProducts(userId: string): InventoryProductRow[] {
   if (typeof window === "undefined") return [];
@@ -422,6 +425,111 @@ function readLocalLojaBusiness(userId: string): LojaBusinessState | null {
 function saveLocalLojaBusiness(userId: string, state: LojaBusinessState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(lojaBusinessLocalKey(userId), JSON.stringify(state));
+}
+
+function normalizeLojaBusinessState(value: unknown): LojaBusinessState {
+  const state = (value ?? {}) as Partial<LojaBusinessState>;
+  return {
+    clients: Array.isArray(state.clients) ? state.clients : [],
+    sales: Array.isArray(state.sales) ? state.sales : [],
+    payments: Array.isArray(state.payments) ? state.payments : [],
+  };
+}
+
+async function readProductLojaBusiness(userId: string): Promise<LojaBusinessState | null> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("observacoes")
+    .eq("user_id", userId)
+    .eq("sku", LOJA_BUSINESS_PRODUCT_SKU)
+    .maybeSingle();
+
+  if (error || !data?.observacoes) return null;
+
+  try {
+    const meta = JSON.parse(data.observacoes) as {
+      app?: string;
+      scope?: string;
+      data?: unknown;
+    };
+    if (meta.app !== "lojadeiphone" || meta.scope !== LOJA_BUSINESS_SCOPE) return null;
+    return normalizeLojaBusinessState(meta.data);
+  } catch {
+    return null;
+  }
+}
+
+async function saveProductLojaBusiness(userId: string, state: LojaBusinessState) {
+  const observacoes = JSON.stringify({
+    app: "lojadeiphone",
+    scope: LOJA_BUSINESS_SCOPE,
+    version: 1,
+    data: state,
+  });
+  const { data: existing } = await supabase
+    .from("products")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("sku", LOJA_BUSINESS_PRODUCT_SKU)
+    .maybeSingle();
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from("products")
+      .update({
+        nome: "Estado da Loja de iPhone V2",
+        observacoes,
+        status: "sistema",
+      })
+      .eq("id", existing.id);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase.from("products").insert({
+    user_id: userId,
+    nome: "Estado da Loja de iPhone V2",
+    sku: LOJA_BUSINESS_PRODUCT_SKU,
+    preco_venda: 0,
+    quantidade: 0,
+    estoque_minimo: 0,
+    status: "sistema",
+    observacoes,
+  });
+  if (error) throw error;
+}
+
+async function readAccountLojaBusiness(userId: string): Promise<LojaBusinessState | null> {
+  const { data, error } = await supabase
+    .from("app_state")
+    .select("data")
+    .eq("user_id", userId)
+    .eq("scope", LOJA_BUSINESS_SCOPE)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Erro ao carregar estado da loja de iPhone", error);
+    return readProductLojaBusiness(userId);
+  }
+
+  if (data?.data) return normalizeLojaBusinessState(data.data);
+  return readProductLojaBusiness(userId);
+}
+
+async function saveAccountLojaBusiness(userId: string, state: LojaBusinessState) {
+  const { error } = await supabase.from("app_state").upsert(
+    {
+      user_id: userId,
+      scope: LOJA_BUSINESS_SCOPE,
+      data: state as unknown as Json,
+    },
+    { onConflict: "user_id,scope" },
+  );
+
+  if (error) {
+    console.error("Erro ao salvar em app_state, usando products como backup", error);
+    await saveProductLojaBusiness(userId, state);
+  }
 }
 
 function hydrateInventoryRows(
@@ -1248,14 +1356,38 @@ function LojaDeIphonePage() {
   useEffect(() => {
     if (!userId) return;
 
-    const business = readLocalLojaBusiness(userId);
-    setClients(business?.clients ?? []);
-    setSales(business?.sales ?? []);
-    setPayments(business?.payments ?? []);
-    setBusinessLoaded(true);
+    const localBusiness = readLocalLojaBusiness(userId);
+    setBusinessLoaded(false);
+    setClients(localBusiness?.clients ?? []);
+    setSales(localBusiness?.sales ?? []);
+    setPayments(localBusiness?.payments ?? []);
 
     let activeRequest = true;
     setInventoryLoading(true);
+
+    readAccountLojaBusiness(userId)
+      .then(async (accountBusiness) => {
+        if (!activeRequest) return;
+
+        if (accountBusiness) {
+          setClients(accountBusiness.clients);
+          setSales(accountBusiness.sales);
+          setPayments(accountBusiness.payments);
+          saveLocalLojaBusiness(userId, accountBusiness);
+          return;
+        }
+
+        if (localBusiness) {
+          await saveAccountLojaBusiness(userId, localBusiness);
+        }
+      })
+      .catch((error) => {
+        console.error("Nao consegui sincronizar os dados da V2 no banco da conta", error);
+        toast.warning("Usei o cache local porque o banco da conta nao respondeu agora");
+      })
+      .finally(() => {
+        if (activeRequest) setBusinessLoaded(true);
+      });
 
     supabase
       .from("products")
@@ -1288,7 +1420,11 @@ function LojaDeIphonePage() {
 
   useEffect(() => {
     if (!userId || !businessLoaded) return;
-    saveLocalLojaBusiness(userId, { clients, sales, payments });
+    const state = { clients, sales, payments };
+    saveLocalLojaBusiness(userId, state);
+    void saveAccountLojaBusiness(userId, state).catch((error) => {
+      console.error("Nao consegui salvar os dados da V2 no banco da conta", error);
+    });
   }, [businessLoaded, clients, payments, sales, userId]);
 
   const totals = useMemo(() => {
