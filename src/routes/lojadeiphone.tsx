@@ -636,6 +636,26 @@ const partQualityOptions = [
   "Recondicionada",
 ];
 
+const stockBrandOptions = [
+  "Apple",
+  "Original Apple",
+  "Original retirada",
+  "Premium",
+  "Nacional",
+  "Paralela",
+  "Incell",
+  "OLED",
+  "GX",
+  "JK",
+  "Tianma",
+  "Deji",
+  "Baseus",
+  "Gshield",
+  "Hrebos",
+  "Kaidi",
+  "Sem marca",
+];
+
 const fiadoAiSystemPrompt = `Voce e a IA oficial do SaaS Fiado V2 para loja de iPhone. Responda como um especialista de produto, claro, direto e util.
 
 Manual interno do app:
@@ -5268,11 +5288,19 @@ function StockProductFormCard({
               onChange={(tipo) => onChange({ tipo })}
             />
           ) : (
-            <StockSelect
+            <StockCreatableSelect
               required
               label="Tipo"
               value={form.tipo}
               onChange={(tipo) => onChange({ tipo })}
+              customLabel={
+                form.kind === "Acessório" ? "Adicionar novo acessório..." : "Adicionar nova peça..."
+              }
+              customPlaceholder={
+                form.kind === "Acessório"
+                  ? "Ex: Adaptador, fone, suporte"
+                  : "Ex: Bateria, tela, flex, câmera..."
+              }
               options={
                 isPhone
                   ? ["Celular"]
@@ -5326,7 +5354,23 @@ function StockProductFormCard({
               }
             />
           )}
-          <StockField label="Marca" value={form.marca} onChange={(marca) => onChange({ marca })} />
+          {isManual ? (
+            <StockField
+              label="Marca"
+              value={form.marca}
+              placeholder="Ex: Deji, JK, GX, marca própria..."
+              onChange={(marca) => onChange({ marca })}
+            />
+          ) : (
+            <StockCreatableSelect
+              label="Marca"
+              value={form.marca}
+              onChange={(marca) => onChange({ marca })}
+              options={isPhone ? ["Apple"] : stockBrandOptions}
+              customLabel="Adicionar nova marca..."
+              customPlaceholder="Ex: Deji, JK, GX, marca própria..."
+            />
+          )}
           <StockField
             type="number"
             label="Quantidade"
@@ -5584,6 +5628,66 @@ function StockSelect({
             </option>
           ))}
       </select>
+    </div>
+  );
+}
+
+const customStockOption = "__custom_stock_option__";
+
+function StockCreatableSelect({
+  label,
+  value,
+  onChange,
+  options,
+  required,
+  customLabel = "Adicionar novo...",
+  customPlaceholder = "Digite o novo valor",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  required?: boolean;
+  customLabel?: string;
+  customPlaceholder?: string;
+}) {
+  const cleanOptions = options.filter((option) => option !== "");
+  const isCustomValue = Boolean(value) && !cleanOptions.includes(value);
+  const selectValue = isCustomValue ? customStockOption : value;
+
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
+      <Label className="pt-2 text-[12px] font-medium text-foreground/80">
+        {required && <span className="text-destructive">* </span>}
+        {label}
+      </Label>
+      <div className="grid gap-2">
+        <select
+          value={selectValue}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            onChange(nextValue === customStockOption ? "" : nextValue);
+          }}
+          className="h-10 min-w-0 rounded-xl border border-border bg-surface-muted px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+        >
+          <option value="">Selecionar</option>
+          {cleanOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+          <option value={customStockOption}>{customLabel}</option>
+        </select>
+        {(selectValue === customStockOption || isCustomValue) && (
+          <Input
+            autoFocus
+            value={isCustomValue ? value : ""}
+            placeholder={customPlaceholder}
+            onChange={(event) => onChange(event.target.value)}
+            className="h-10 min-w-0 rounded-xl border-primary/25 bg-primary/5 text-sm"
+          />
+        )}
+      </div>
     </div>
   );
 }
