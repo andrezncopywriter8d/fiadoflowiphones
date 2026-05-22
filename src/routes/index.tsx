@@ -854,36 +854,14 @@ const askFiadoAIServer = createServerFn({ method: "POST" })
     const localParts =
       data.mode === "catalogo" ? sanitizeAiParts(parseCatalogText(data.prompt)) : [];
     const localAnswer = localFiadoAnswer(data.mode, localParts.length, data.prompt);
+    const shouldPreferLocalCatalog =
+      data.mode === "catalogo" &&
+      localParts.length > 0 &&
+      (/\bcusto\b/i.test(data.prompt) || /\bvenda\b/i.test(data.prompt));
 
     try {
-      const response = await fetch("https://text.pollinations.ai/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "openai",
-          messages: [
-            { role: "system", content: fiadoAiSystemPrompt },
-            {
-              role: "user",
-              content: JSON.stringify({
-                mode: data.mode,
-                prompt: data.prompt,
-                appContext: data.appContext,
-              }),
-            },
-          ],
-          temperature: 0.15,
-        }),
-      });
-
-      if (!response.ok) throw new Error(`AI status ${response.status}`);
-      const payload = await response.json();
-      const content = payload?.choices?.[0]?.message?.content ?? "";
-      const parsed = parseAiJson(content);
-      const shouldPreferLocalCatalog =
-        data.mode === "catalogo" &&
-        localParts.length > 0 &&
-        (/\bcusto\b/i.test(data.prompt) || /\bvenda\b/i.test(data.prompt));
+      const aiResult = await askGeminiFiadoAI(data);
+      const parsed = parseAiJson(aiResult);
       const parts = shouldPreferLocalCatalog
         ? localParts
         : sanitizeAiParts(parsed.parts?.length ? parsed.parts : localParts);
@@ -894,13 +872,103 @@ const askFiadoAIServer = createServerFn({ method: "POST" })
         parts,
       };
     } catch {
-      return {
-        answer: localAnswer,
-        questions: buildAiQuestions(localParts),
-        parts: localParts,
-      };
+      try {
+        const aiResult = await askPollinationsFiadoAI(data);
+        const parsed = parseAiJson(aiResult);
+        const parts = shouldPreferLocalCatalog
+          ? localParts
+          : sanitizeAiParts(parsed.parts?.length ? parsed.parts : localParts);
+
+        return {
+          answer: shouldPreferLocalCatalog ? localAnswer : parsed.answer || localAnswer,
+          questions: parsed.questions?.length ? parsed.questions : buildAiQuestions(parts),
+          parts,
+        };
+      } catch {
+        return {
+          answer: localAnswer,
+          questions: buildAiQuestions(localParts),
+          parts: localParts,
+        };
+      }
     }
   });
+
+async function askGeminiFiadoAI(data: FiadoAiRequest) {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: fiadoAiSystemPrompt }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: JSON.stringify({
+                  mode: data.mode,
+                  prompt: data.prompt,
+                  appContext: data.appContext,
+                }),
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.15,
+          responseMimeType: "application/json",
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) throw new Error(`Gemini status ${response.status}`);
+  const payload = await response.json();
+  const text =
+    payload?.candidates?.[0]?.content?.parts
+      ?.map((part: { text?: string }) => part.text || "")
+      .join("") || "";
+
+  if (!text.trim()) throw new Error("Gemini empty response");
+  return text;
+}
+
+async function askPollinationsFiadoAI(data: FiadoAiRequest) {
+  const response = await fetch("https://text.pollinations.ai/openai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "openai",
+      messages: [
+        { role: "system", content: fiadoAiSystemPrompt },
+        {
+          role: "user",
+          content: JSON.stringify({
+            mode: data.mode,
+            prompt: data.prompt,
+            appContext: data.appContext,
+          }),
+        },
+      ],
+      temperature: 0.15,
+    }),
+  });
+
+  if (!response.ok) throw new Error(`AI status ${response.status}`);
+  const payload = await response.json();
+  return payload?.choices?.[0]?.message?.content ?? "";
+}
 
 const serviceTypes = [
   "Troca de bateria",
