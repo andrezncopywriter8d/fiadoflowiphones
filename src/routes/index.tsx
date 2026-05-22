@@ -573,11 +573,15 @@ function hydrateInventoryRows(
   setParts: Dispatch<SetStateAction<Part[]>>,
   setServices: Dispatch<SetStateAction<ServiceOrder[]>>,
 ) {
+  const uniqueRows = new Map<string, InventoryProductRow>();
+  rows.forEach((row) => {
+    uniqueRows.set(row.id, row);
+  });
   const loadedPhones: Phone[] = [];
   const loadedParts: Part[] = [];
   const loadedServices: ServiceOrder[] = [];
 
-  rows.forEach((row) => {
+  uniqueRows.forEach((row) => {
     const parsed = parseInventoryProduct(row);
     if (!parsed) return;
     if (parsed.kind === "phone") loadedPhones.push(parsed.item);
@@ -1527,6 +1531,7 @@ function LojaDeIphonePage() {
     supabase
       .from("products")
       .select("id,nome,sku,preco_venda,quantidade,estoque_minimo,status,observacoes")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (!activeRequest) return;
@@ -2777,14 +2782,14 @@ function LojaDeIphonePage() {
     }
   }
 
-  function importAiDraftParts() {
+  async function importAiDraftParts() {
     if (!aiDraftParts.length) {
       toast.error("Nenhum item de catalogo para importar");
       return;
     }
 
     const now = Date.now();
-    const imported: Part[] = aiDraftParts.map((part, index) => ({
+    const importedDrafts: Part[] = aiDraftParts.map((part, index) => ({
       id: now + index,
       tipo: part.tipo,
       modelo: part.modelo,
@@ -2801,10 +2806,41 @@ function LojaDeIphonePage() {
       status: stockStatus(part.quantidade, part.minimo),
     }));
 
+    if (!user?.id) {
+      setParts((items) => [...importedDrafts, ...items]);
+      setAiDraftParts([]);
+      resetFilters("estoque");
+      toast.warning("Itens adicionados nesta sessao. Entre na conta para salvar no banco.");
+      return;
+    }
+
+    const savedParts: Part[] = [];
+    for (const part of importedDrafts) {
+      const savedPart = await saveLojaInventoryProduct({
+        userId: user.id,
+        kind: "part",
+        name: `${part.tipo} ${part.modelo}`.trim(),
+        sku: part.sku,
+        salePrice: part.preco,
+        quantity: part.quantidade,
+        minimum: part.minimo,
+        status: part.status,
+        data: part,
+      });
+
+      if (savedPart) savedParts.push(savedPart as Part);
+    }
+
+    if (!savedParts.length) {
+      toast.error("Nao consegui salvar os itens no estoque da sua conta");
+      return;
+    }
+
+    const imported = savedParts;
     setParts((items) => [...imported, ...items]);
     setAiDraftParts([]);
     resetFilters("estoque");
-    toast.success(`${imported.length} itens adicionados ao estoque`);
+    toast.success(`${imported.length} itens salvos no estoque da sua conta`);
   }
 
   function resetSaleForm() {
@@ -8036,9 +8072,9 @@ function parseInventoryProduct(row: InventoryProductRow) {
           ...meta.data,
           id: numericIdFromString(row.id),
           productId: row.id,
-          preco: Number(row.preco_venda) || meta.data.preco,
-          quantidade: Number(row.quantidade) || meta.data.quantidade,
-          minimo: Number(row.estoque_minimo) || meta.data.minimo,
+          preco: row.preco_venda ?? meta.data.preco,
+          quantidade: row.quantidade ?? meta.data.quantidade,
+          minimo: row.estoque_minimo ?? meta.data.minimo,
           status: (row.status as Part["status"]) || meta.data.status,
         },
       };
