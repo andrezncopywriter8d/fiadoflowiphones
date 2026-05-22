@@ -7792,7 +7792,35 @@ function GeneratedPartsPreview() {
 }
 
 function moneyToNumber(value: string) {
-  const normalized = value.replace(/\./g, "").replace(",", ".");
+  const trimmed = String(value ?? "")
+    .trim()
+    .replace(/[^\d.,-]/g, "");
+  if (!trimmed) return 0;
+
+  const hasComma = trimmed.includes(",");
+  const hasDot = trimmed.includes(".");
+  const lastComma = trimmed.lastIndexOf(",");
+  const lastDot = trimmed.lastIndexOf(".");
+  let normalized = trimmed;
+
+  if (hasComma && hasDot) {
+    normalized =
+      lastComma > lastDot
+        ? trimmed.replace(/\./g, "").replace(",", ".")
+        : trimmed.replace(/,/g, "");
+  } else if (hasComma) {
+    normalized = trimmed.replace(",", ".");
+  } else if (hasDot) {
+    const parts = trimmed.split(".");
+    const decimalPart = parts[parts.length - 1] ?? "";
+    const looksLikeThousands =
+      parts.length > 1 &&
+      decimalPart.length === 3 &&
+      parts.slice(1).every((part) => part.length === 3);
+
+    normalized = looksLikeThousands ? trimmed.replace(/\./g, "") : trimmed;
+  }
+
   return Math.max(0, Number(normalized) || 0);
 }
 
