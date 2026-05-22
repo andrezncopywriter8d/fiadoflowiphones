@@ -880,10 +880,16 @@ const askFiadoAIServer = createServerFn({ method: "POST" })
       const payload = await response.json();
       const content = payload?.choices?.[0]?.message?.content ?? "";
       const parsed = parseAiJson(content);
-      const parts = sanitizeAiParts(parsed.parts?.length ? parsed.parts : localParts);
+      const shouldPreferLocalCatalog =
+        data.mode === "catalogo" &&
+        localParts.length > 0 &&
+        (/\bcusto\b/i.test(data.prompt) || /\bvenda\b/i.test(data.prompt));
+      const parts = shouldPreferLocalCatalog
+        ? localParts
+        : sanitizeAiParts(parsed.parts?.length ? parsed.parts : localParts);
 
       return {
-        answer: parsed.answer || localAnswer,
+        answer: shouldPreferLocalCatalog ? localAnswer : parsed.answer || localAnswer,
         questions: parsed.questions?.length ? parsed.questions : buildAiQuestions(parts),
         parts,
       };
@@ -8175,17 +8181,22 @@ function sanitizeAiParts(parts: AiCatalogPart[]) {
       const price = Math.max(0, Number(part.preco) || 0);
       const installedPrice = Math.max(price, Number(part.precoInstalado) || price);
       const minimum = Math.max(0, Number(part.minimo) || 1);
-      const quality = partQualityOptions.includes(part.qualidade) ? part.qualidade : "Premium";
+      const quality =
+        partQualityOptions.includes(part.qualidade) || stockBrandOptions.includes(part.qualidade)
+          ? part.qualidade
+          : "Premium";
       const normalizedType = normalizeSearch(part.tipo);
       const type =
         partTypes.find((item) => normalizeSearch(item) === normalizedType) ||
         partTypes.find((item) => normalizedType.includes(normalizeSearch(item))) ||
         part.tipo ||
         "Peca";
-      const model =
-        iphoneModels.find((item) => normalizeSearch(part.modelo).includes(normalizeSearch(item))) ||
-        part.modelo ||
-        "Modelo a confirmar";
+      const rawModel = part.modelo || "";
+      const model = rawModel.includes("/")
+        ? rawModel
+        : iphoneModels.find((item) => normalizeSearch(rawModel).includes(normalizeSearch(item))) ||
+          rawModel ||
+          "Modelo a confirmar";
 
       return {
         tipo: type,
@@ -8212,49 +8223,185 @@ function sanitizeAiParts(parts: AiCatalogPart[]) {
 }
 
 function parseCatalogText(text: string): AiCatalogPart[] {
-  return text
+  const context = inferCatalogContext(text);
+  const structuredParts = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
+    .filter((line) => isCatalogItemLine(line))
     .map((line) => {
       const normalized = normalizeSearch(line);
-      const quantityMatch = line.match(/(?:^|\s)(\d+)\s*(?:un|und|unidades|x)?/i);
-      const moneyMatches = [...line.matchAll(/(?:r\$)?\s*(\d+(?:[.,]\d{1,2})?)/gi)]
-        .map((match) => Number(match[1].replace(",", ".")))
-        .filter((value) => value > 0);
+      const cost = extractCatalogMoney(line, "custo");
+      const price = extractCatalogMoney(line, "venda");
+      const fallbackMoney = extractMoneyValues(line);
+      const resolvedCost = cost ?? (fallbackMoney.length >= 2 ? fallbackMoney[0] : 0);
+      const resolvedPrice = price ?? (fallbackMoney.length >= 2 ? fallbackMoney[1] : 0);
+      const quantity = extractCatalogQuantity(line) ?? context.quantidade ?? 1;
       const type =
         partTypes.find((item) => normalized.includes(normalizeSearch(item))) ||
-        (normalized.includes("tela") ? "Tela frontal" : "") ||
+        context.tipo ||
+        (normalized.includes("display") || normalized.includes("tela") ? "Tela frontal" : "") ||
         (normalized.includes("bateria") ? "Bateria" : "") ||
         "Peca";
-      const model =
-        iphoneModels.find((item) => normalized.includes(normalizeSearch(item))) ||
-        "Modelo a confirmar";
+      const model = inferIphoneModelFromCatalogLine(line);
       const quality =
         partQualityOptions.find((item) => normalized.includes(normalizeSearch(item))) ||
+        context.qualidade ||
+        stockBrandOptions.find((item) => normalized.includes(normalizeSearch(item))) ||
         (normalized.includes("incell") ? "Incell" : "") ||
         (normalized.includes("oled") ? "OLED" : "") ||
         "Premium";
-      const quantity = quantityMatch ? Math.max(1, Number(quantityMatch[1])) : 1;
-      const cost = moneyMatches.length >= 2 ? moneyMatches[0] : 0;
-      const price = moneyMatches.length >= 2 ? moneyMatches[1] : moneyMatches[0] || 0;
+      const supplier = context.fornecedor || extractSupplierFromLine(line);
+      const hasConsultar = normalized.includes("consultar");
 
       return {
         tipo: type,
         modelo: model,
         qualidade: quality,
-        fornecedor: "",
-        custo: cost,
-        preco: price,
-        precoInstalado: price,
+        fornecedor: supplier,
+        custo: resolvedCost,
+        preco: resolvedPrice,
+        precoInstalado: resolvedPrice,
         quantidade: quantity,
         minimo: 1,
-        localizacao: "",
+        localizacao: context.localizacao,
         garantia: 30,
         observacoes: line,
-        precisaRevisao: model === "Modelo a confirmar" || price <= 0,
+        precisaRevisao: model === "Modelo a confirmar" || resolvedPrice <= 0 || hasConsultar,
       };
     });
+
+  return structuredParts;
+}
+
+function inferCatalogContext(text: string) {
+  const normalized = normalizeSearch(text);
+  const headerLine = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => !line.match(/\bcusto\b/i) && !line.match(/\bvenda\b/i) && line.length > 4);
+  const headerParts =
+    headerLine
+      ?.split(/[—-]/)
+      .map((part) => part.trim())
+      .filter(Boolean) ?? [];
+  const supplierFromHeader = headerParts.length > 1 ? headerParts[headerParts.length - 1] : "";
+  const explicitSupplier =
+    text.match(/fornecedor\s*[:\-]\s*([^\n|]+)/i)?.[1]?.trim() ||
+    (supplierFromHeader && !normalizeSearch(supplierFromHeader).includes("tela")
+      ? supplierFromHeader
+      : "");
+  const quantity = text.match(/\bqtd\.?\s*[:\-]\s*(\d+)/i)?.[1];
+
+  return {
+    tipo: normalized.includes("tela") || normalized.includes("display") ? "Tela frontal" : "",
+    qualidade:
+      stockBrandOptions.find((option) => normalized.includes(normalizeSearch(option))) ||
+      partQualityOptions.find((option) => normalized.includes(normalizeSearch(option))) ||
+      "",
+    fornecedor: explicitSupplier || "",
+    quantidade: quantity ? Math.max(1, Number(quantity)) : undefined,
+    localizacao: text.match(/localiza[cç][aã]o\s*[:\-]\s*([^\n]+)/i)?.[1]?.trim() || "",
+  };
+}
+
+function isCatalogItemLine(line: string) {
+  const normalized = normalizeSearch(line);
+  if (!line.match(/[•*-]|\bcusto\b|\bvenda\b|\bconsultar\b/i)) return false;
+  if (normalized.includes("valores com") || normalized.includes("passarinho")) return false;
+  return /\bcusto\b/i.test(line) || /\bvenda\b/i.test(line) || /\bconsultar\b/i.test(line);
+}
+
+function extractMoneyValues(line: string) {
+  return [...line.matchAll(/(?:r\$)?\s*(\d{1,6}(?:[.,]\d{1,2}))/gi)]
+    .map((match) => Number(match[1].replace(".", "").replace(",", ".")))
+    .filter((value) => value > 0);
+}
+
+function extractCatalogMoney(line: string, label: "custo" | "venda") {
+  const match = line.match(
+    new RegExp(`${label}\\s*[:\\-]?\\s*(?:r\\$)?\\s*(\\d{1,6}(?:[.,]\\d{1,2})?)`, "i"),
+  );
+  return match ? Number(match[1].replace(".", "").replace(",", ".")) : undefined;
+}
+
+function extractCatalogQuantity(line: string) {
+  const match = line.match(/\b(?:qtd|qtde|quantidade)\.?\s*[:\-]\s*(\d+)/i);
+  return match ? Math.max(1, Number(match[1])) : undefined;
+}
+
+function extractSupplierFromLine(line: string) {
+  return line.match(/fornecedor\s*[:\-]\s*([^|]+)/i)?.[1]?.trim() || "";
+}
+
+function inferIphoneModelFromCatalogLine(line: string) {
+  const withoutPrices = line
+    .replace(/\bcusto\s*[:\-]?\s*(?:r\$)?\s*\d{1,6}(?:[.,]\d{1,2})?/gi, "")
+    .replace(/\bvenda\s*[:\-]?\s*(?:r\$)?\s*\d{1,6}(?:[.,]\d{1,2})?/gi, "")
+    .replace(/\bconsultar valor\b/gi, "")
+    .replace(/[•|]/g, " ")
+    .trim();
+  const leftSide = withoutPrices.split(/[—-]/)[0]?.trim() || withoutPrices;
+  const cleaned = leftSide
+    .replace(/\b(tela|display|frontal|iph|iphone)\b/gi, " ")
+    .replace(/\b(JK|GX|OLED|INCELL|PREMIUM|NACIONAL|PARALELA)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const slash = cleaned.match(/^(\d{1,2})(?:\s*\/\s*)(\d{1,2})\s*(PRO|PLUS|MINI|PRO MAX)?$/i);
+  if (slash) {
+    const first = formatIphoneModelToken(slash[1]);
+    const second = formatIphoneModelToken(`${slash[2]}${slash[3] || ""}`);
+    return `${first} / ${second}`;
+  }
+
+  return formatIphoneModelToken(cleaned);
+}
+
+function formatIphoneModelToken(token: string) {
+  const normalized = token
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+    .replace(/^IPHONE\s+/, "")
+    .replace(/^IPH\s+/, "");
+  const compact = normalized.replace(/\s+/g, "");
+  const special: Record<string, string> = {
+    X: "iPhone X",
+    XS: "iPhone XS",
+    XR: "iPhone XR",
+    XSMAX: "iPhone XS Max",
+    "11": "iPhone 11",
+    "11PRO": "iPhone 11 Pro",
+    "11PROMAX": "iPhone 11 Pro Max",
+    "12MINI": "iPhone 12 mini",
+    "12": "iPhone 12",
+    "12PRO": "iPhone 12 Pro",
+    "12PROMAX": "iPhone 12 Pro Max",
+    "13MINI": "iPhone 13 mini",
+    "13": "iPhone 13",
+    "13PRO": "iPhone 13 Pro",
+    "13PROMAX": "iPhone 13 Pro Max",
+    "14": "iPhone 14",
+    "14PLUS": "iPhone 14 Plus",
+    "14PRO": "iPhone 14 Pro",
+    "14PROMAX": "iPhone 14 Pro Max",
+    "15": "iPhone 15",
+    "15PLUS": "iPhone 15 Plus",
+    "15PRO": "iPhone 15 Pro",
+    "15PROMAX": "iPhone 15 Pro Max",
+    "16": "iPhone 16",
+    "16PLUS": "iPhone 16 Plus",
+    "16E": "iPhone 16e",
+    "16PRO": "iPhone 16 Pro",
+    "16PROMAX": "iPhone 16 Pro Max",
+  };
+
+  return (
+    special[compact] ||
+    iphoneModels.find((model) => normalizeSearch(model) === normalizeSearch(`iPhone ${token}`)) ||
+    iphoneModels.find((model) => normalizeSearch(token).includes(normalizeSearch(model))) ||
+    "Modelo a confirmar"
+  );
 }
 
 function buildAiQuestions(parts: AiCatalogPart[]) {
