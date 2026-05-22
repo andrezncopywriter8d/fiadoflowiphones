@@ -3197,6 +3197,7 @@ function LojaDeIphonePage() {
   function registerLoan() {
     const value = Number(newLoan.valor) || 0;
     const entry = Number(newLoan.entrada) || 0;
+    const loanItemName = newLoan.item.trim();
     const installments = Math.max(1, Number(newLoan.parcelas) || 1);
     const monthlyInterest = Math.max(0, Number(newLoan.jurosMensal) || 0);
     const chargeDay = Math.min(31, Math.max(1, Number(newLoan.diaCobranca) || 20));
@@ -3208,12 +3209,12 @@ function LojaDeIphonePage() {
       return;
     }
 
-    if (!selectedLoanStockOption || !newLoan.item || value <= 0) {
+    if (!loanItemName || value <= 0) {
       toast.error("Informe a peca ou celular emprestado e o valor");
       return;
     }
 
-    if (selectedLoanStockOption.available <= 0) {
+    if (selectedLoanStockOption && selectedLoanStockOption.available <= 0) {
       toast.error("Esse item esta sem estoque para emprestimo");
       return;
     }
@@ -3238,15 +3239,15 @@ function LojaDeIphonePage() {
           })
         : undefined;
     const linkedPhone =
-      selectedLoanStockOption.kind === "phone"
+      selectedLoanStockOption?.kind === "phone"
         ? phones.find((phone) => phone.id === selectedLoanStockOption.sourceId)
         : undefined;
-    const loanKind = selectedLoanStockOption.kind === "phone" ? "Celular" : "Peça";
+    const loanKind = selectedLoanStockOption?.kind === "phone" ? "Celular" : "Peça";
     const sale: Sale = {
       id: Date.now(),
       cliente: selectedClient.nome,
       tipo: loanKind,
-      item: selectedLoanStockOption.title,
+      item: loanItemName,
       quantidade: 1,
       unitario: value + (programmedTotal - balance),
       desconto: 0,
@@ -3283,7 +3284,7 @@ function LojaDeIphonePage() {
     }
     setParts((items) =>
       items.map((part) =>
-        selectedLoanStockOption.kind === "part" && part.id === selectedLoanStockOption.sourceId
+        selectedLoanStockOption?.kind === "part" && part.id === selectedLoanStockOption.sourceId
           ? {
               ...part,
               quantidade: Math.max(part.quantidade - 1, 0),
@@ -5333,7 +5334,7 @@ function LojaDeIphonePage() {
                               disabled={loanStockOptions.length === 0}
                             >
                               <SelectTrigger className="h-11 rounded-2xl border-border bg-surface px-4 text-sm shadow-soft transition hover:border-primary/35 focus:ring-2 focus:ring-primary/20 data-[placeholder]:text-muted-foreground">
-                                <SelectValue placeholder="Selecionar item do estoque" />
+                                <SelectValue placeholder="Selecionar do estoque" />
                               </SelectTrigger>
                               <SelectContent className="max-h-72 overflow-y-auto rounded-2xl border-border bg-surface p-1 shadow-float">
                                 {loanStockOptions.map((option) => (
@@ -5350,11 +5351,22 @@ function LojaDeIphonePage() {
                                 ))}
                               </SelectContent>
                             </Select>
-                            {loanStockOptions.length === 0 && (
-                              <p className="text-xs text-muted-foreground">
-                                Cadastre um item no estoque antes de registrar emprestimo.
-                              </p>
-                            )}
+                            <Input
+                              className="h-11"
+                              placeholder="Ou digite o item manualmente"
+                              value={newLoan.item}
+                              onChange={(event) =>
+                                setNewLoan({
+                                  ...newLoan,
+                                  itemKey: "",
+                                  item: event.target.value,
+                                })
+                              }
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Se selecionar do estoque, o sistema baixa 1 unidade. Se digitar
+                              manualmente, registra sem mexer no estoque.
+                            </p>
                           </div>
                           <div className="space-y-1.5 lg:col-span-2">
                             <Label>Valor</Label>
