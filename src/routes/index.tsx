@@ -2,7 +2,15 @@ import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -205,7 +213,7 @@ type Sale = {
   modalidade?: "avista" | "fiado" | "emprestimo";
   jurosMensal?: number;
   diaCobranca?: number;
-  frequenciaCobranca?: "semanal" | "mensal";
+  frequenciaCobranca?: "semanal" | "quinzenal" | "mensal";
   valorTotalEmprestimo?: number;
   totalProgramado?: number;
   parcelasAgenda?: LoanInstallment[];
@@ -248,7 +256,7 @@ type LoanForm = {
   parcelas: string;
   jurosMensal: string;
   diaCobranca: string;
-  frequenciaCobranca: "semanal" | "mensal";
+  frequenciaCobranca: "semanal" | "quinzenal" | "mensal";
   primeiraParcela: string;
 };
 
@@ -1451,7 +1459,7 @@ function LojaDeIphonePage() {
     modalidade: "avista" as NonNullable<Sale["modalidade"]>,
     jurosMensal: "0",
     diaCobranca: "20",
-    frequenciaCobranca: "mensal" as "semanal" | "mensal",
+    frequenciaCobranca: "mensal" as "semanal" | "quinzenal" | "mensal",
     primeiraParcela: "2026-06-20",
   });
   const [saleMeta, setSaleMeta] = useState({
@@ -1473,6 +1481,7 @@ function LojaDeIphonePage() {
     observacao: "",
   });
   const [salePayments, setSalePayments] = useState<SalePaymentEntry[]>([]);
+  const loanImportInputRef = useRef<HTMLInputElement | null>(null);
   const [newLoan, setNewLoan] = useState<LoanForm>({
     cliente: "",
     itemKey: "",
@@ -1916,8 +1925,8 @@ function LojaDeIphonePage() {
           total: loanProgrammedTotalPreview,
         })
       : [];
-  const loanFormValuePreview = Number(newLoan.valor) || 0;
-  const loanFormEntryPreview = Number(newLoan.entrada) || 0;
+  const loanFormValuePreview = moneyToNumber(newLoan.valor);
+  const loanFormEntryPreview = moneyToNumber(newLoan.entrada);
   const loanFormInstallmentsPreview = Math.max(1, Number(newLoan.parcelas) || 1);
   const loanFormInterestPreview = Math.max(0, Number(newLoan.jurosMensal) || 0);
   const loanFormChargeDayPreview = Math.min(31, Math.max(1, Number(newLoan.diaCobranca) || 20));
@@ -2854,7 +2863,7 @@ function LojaDeIphonePage() {
       modalidade: "avista" as NonNullable<Sale["modalidade"]>,
       jurosMensal: "0",
       diaCobranca: "20",
-      frequenciaCobranca: "mensal" as "semanal" | "mensal",
+      frequenciaCobranca: "mensal" as "semanal" | "quinzenal" | "mensal",
       primeiraParcela: nextDueDate(today, 20),
     });
     setSaleMeta({ vendedor: firstName, data: today, entrega: "Retirada", observacoes: "" });
@@ -3238,8 +3247,8 @@ function LojaDeIphonePage() {
   }
 
   function registerLoan() {
-    const value = Number(newLoan.valor) || 0;
-    const entry = Number(newLoan.entrada) || 0;
+    const value = moneyToNumber(newLoan.valor);
+    const entry = moneyToNumber(newLoan.entrada);
     const loanItemName = newLoan.item.trim();
     const installments = Math.max(1, Number(newLoan.parcelas) || 1);
     const monthlyInterest = Math.max(0, Number(newLoan.jurosMensal) || 0);
@@ -3360,6 +3369,158 @@ function LojaDeIphonePage() {
     });
     setFormModal(null);
     toast.success("Emprestimo registrado e cobrancas programadas");
+  }
+
+  function parseLoanImportRows(text: string) {
+    const rows = text
+      .split(/\r?\n/)
+      .map((line) => splitSpreadsheetLine(line))
+      .filter((row) => row.some(Boolean));
+
+    if (rows.length === 0) return [];
+
+    const firstRow = rows[0].map(normalizeImportHeader);
+    const hasHeader = firstRow.some((cell) =>
+      ["cliente", "item", "peca", "produto", "valor", "total"].includes(cell),
+    );
+    const headers = hasHeader
+      ? firstRow
+      : ["cliente", "item", "valor", "entrada", "parcelas", "frequencia", "primeira_parcela"];
+    const dataRows = hasHeader ? rows.slice(1) : rows;
+
+    return dataRows
+      .map((row) => {
+        const record = headers.reduce<Record<string, string>>((acc, header, index) => {
+          acc[header] = row[index] ?? "";
+          return acc;
+        }, {});
+        const client = pickImportValue(record, ["cliente", "nome", "nome_cliente"]);
+        const item = pickImportValue(record, [
+          "item",
+          "peca",
+          "produto",
+          "nome_item",
+          "nome_do_item",
+        ]);
+        const value = moneyToNumber(pickImportValue(record, ["valor", "valor_total", "total"]));
+        const entry = moneyToNumber(pickImportValue(record, ["entrada", "valor_entrada"]));
+        const installments = Math.max(
+          1,
+          Number(pickImportValue(record, ["parcelas", "qtd_parcelas", "vezes"])) || 1,
+        );
+        const frequency = normalizeLoanFrequency(
+          pickImportValue(record, ["frequencia", "periodicidade"]),
+        );
+        const chargeDay = Math.min(
+          31,
+          Math.max(1, Number(pickImportValue(record, ["dia", "dia_cobranca"])) || 20),
+        );
+        const firstDueDate =
+          normalizeImportDate(
+            pickImportValue(record, ["primeira", "primeira_parcela", "vencimento"]),
+          ) || nextDueDate(today, chargeDay);
+        const interest = Math.max(0, moneyToNumber(pickImportValue(record, ["juros", "taxa"])));
+
+        return {
+          client,
+          item,
+          value,
+          entry,
+          installments,
+          frequency,
+          chargeDay,
+          firstDueDate,
+          interest,
+        };
+      })
+      .filter((row) => row.client && row.item && row.value > 0);
+  }
+
+  async function handleLoanImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const importedLoans = parseLoanImportRows(text);
+    event.target.value = "";
+
+    if (importedLoans.length === 0) {
+      toast.error("Nao encontrei emprestimos validos na planilha");
+      return;
+    }
+
+    const clientByName = new Map(clients.map((client) => [client.nome.toLowerCase(), client]));
+    const createdClients: Client[] = [];
+    const importedSales: Sale[] = importedLoans.map((loan, index) => {
+      if (!clientByName.has(loan.client.toLowerCase())) {
+        const client: Client = {
+          id: Date.now() + 5000 + index,
+          nome: loan.client,
+          tipo: "B2C",
+          whatsapp: "",
+          cpf: "",
+          email: "",
+          endereco: "",
+          compras: 0,
+          totalComprado: 0,
+          aberto: 0,
+          aparelhos: [],
+          servicos: [],
+          pecas: [],
+          status: "Ativo",
+          observacoes: "Cliente criado pela importacao de emprestimos.",
+          dataCadastro: today,
+        };
+        clientByName.set(client.nome.toLowerCase(), client);
+        createdClients.push(client);
+      }
+
+      const balance = Math.max(loan.value - loan.entry, 0);
+      const programmedTotal = Number(
+        (balance * (1 + (loan.interest / 100) * loan.installments)).toFixed(2),
+      );
+      const schedule =
+        balance > 0
+          ? buildLoanSchedule({
+              firstDueDate: loan.firstDueDate,
+              chargeDay: loan.chargeDay,
+              frequency: loan.frequency,
+              count: loan.installments,
+              total: programmedTotal,
+            })
+          : undefined;
+
+      return {
+        id: Date.now() + index,
+        cliente: loan.client,
+        tipo: "PeÃ§a",
+        item: loan.item,
+        quantidade: 1,
+        unitario: loan.value + (programmedTotal - balance),
+        desconto: 0,
+        pagamento: "Emprestimo importado",
+        entrada: loan.entry,
+        parcelas: loan.installments,
+        vencimento: schedule?.[0]?.vencimento ?? loan.firstDueDate,
+        dataVenda: today,
+        status: loan.entry >= loan.value ? "Pago" : loan.entry > 0 ? "Parcial" : "Em aberto",
+        lucro: Math.max(loan.value * 0.25, 0),
+        modalidade: "emprestimo",
+        jurosMensal: loan.interest,
+        diaCobranca: loan.chargeDay,
+        frequenciaCobranca: loan.frequency,
+        valorTotalEmprestimo: programmedTotal,
+        totalProgramado: programmedTotal,
+        parcelasAgenda: schedule,
+      };
+    });
+
+    if (createdClients.length > 0) {
+      setClients((items) => [...createdClients, ...items]);
+    }
+    setSales((items) => [...importedSales, ...items]);
+    setFormModal(null);
+    toast.success(`${importedSales.length} emprestimo(s) importado(s)`);
   }
 
   function validateLoanPayment(saleId: number, installmentId?: number) {
@@ -5057,10 +5218,13 @@ function LojaDeIphonePage() {
                                       onChange={(value) =>
                                         setNewSale({
                                           ...newSale,
-                                          frequenciaCobranca: value as "semanal" | "mensal",
+                                          frequenciaCobranca: value as
+                                            | "semanal"
+                                            | "quinzenal"
+                                            | "mensal",
                                         })
                                       }
-                                      options={["semanal", "mensal"]}
+                                      options={["semanal", "quinzenal", "mensal"]}
                                     />
                                   </FieldBlock>
                                 )}
@@ -5070,7 +5234,7 @@ function LojaDeIphonePage() {
                                     inputMode="numeric"
                                     disabled={
                                       newSale.modalidade === "emprestimo" &&
-                                      newSale.frequenciaCobranca === "semanal"
+                                      newSale.frequenciaCobranca !== "mensal"
                                     }
                                     onChange={(event) =>
                                       setNewSale({ ...newSale, diaCobranca: event.target.value })
@@ -5327,7 +5491,26 @@ function LojaDeIphonePage() {
                         id="iphone-loan-form"
                         title="Registrar emprestimo de peca"
                         icon={Wallet}
-                        action={<Button onClick={registerLoan}>Registrar emprestimo</Button>}
+                        action={
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <input
+                              ref={loanImportInputRef}
+                              type="file"
+                              accept=".csv,.txt,.tsv"
+                              className="hidden"
+                              onChange={handleLoanImportFile}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => loanImportInputRef.current?.click()}
+                            >
+                              <FileText className="h-4 w-4" />
+                              Importar planilha
+                            </Button>
+                            <Button onClick={registerLoan}>Registrar emprestimo</Button>
+                          </div>
+                        }
                       >
                         <div className="grid gap-4 lg:grid-cols-12">
                           <div className="space-y-1.5 lg:col-span-3">
@@ -5451,22 +5634,22 @@ function LojaDeIphonePage() {
                               onChange={(value) =>
                                 setNewLoan({
                                   ...newLoan,
-                                  frequenciaCobranca: value as "semanal" | "mensal",
+                                  frequenciaCobranca: value as "semanal" | "quinzenal" | "mensal",
                                 })
                               }
-                              options={["semanal", "mensal"]}
+                              options={["semanal", "quinzenal", "mensal"]}
                             />
                           </div>
                           <div className="space-y-1.5 lg:col-span-2">
                             <Label>
-                              {newLoan.frequenciaCobranca === "semanal"
+                              {newLoan.frequenciaCobranca !== "mensal"
                                 ? "Dia mensal"
                                 : "Dia cobranca"}
                             </Label>
                             <Input
                               placeholder="20"
                               value={newLoan.diaCobranca}
-                              disabled={newLoan.frequenciaCobranca === "semanal"}
+                              disabled={newLoan.frequenciaCobranca !== "mensal"}
                               inputMode="numeric"
                               onChange={(event) =>
                                 setNewLoan({ ...newLoan, diaCobranca: event.target.value })
@@ -7867,6 +8050,67 @@ function moneyToNumber(value: string) {
   return Math.max(0, Number(normalized) || 0);
 }
 
+function splitSpreadsheetLine(line: string) {
+  const delimiter = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === delimiter && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function normalizeImportHeader(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+function pickImportValue(record: Record<string, string>, keys: string[]) {
+  for (const key of keys) {
+    const normalizedKey = normalizeImportHeader(key);
+    const value = record[normalizedKey] ?? record[key];
+    if (value) return value;
+  }
+  return "";
+}
+
+function normalizeLoanFrequency(value: string): "semanal" | "quinzenal" | "mensal" {
+  const normalized = normalizeImportHeader(value);
+  if (normalized.includes("quinz") || normalized.includes("15")) return "quinzenal";
+  if (normalized.includes("semana") || normalized.includes("7")) return "semanal";
+  return "mensal";
+}
+
+function normalizeImportDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (!match) return "";
+
+  const [, day, month, year] = match;
+  const fullYear = year.length === 2 ? `20${year}` : year;
+  return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
 function numberToCents(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 100);
 }
@@ -8256,7 +8500,7 @@ function buildLoanSchedule({
 }: {
   firstDueDate: string;
   chargeDay: number;
-  frequency?: "semanal" | "mensal";
+  frequency?: "semanal" | "quinzenal" | "mensal";
   count: number;
   total: number;
 }) {
@@ -8267,11 +8511,11 @@ function buildLoanSchedule({
 
   return Array.from({ length: count }, (_, index): LoanInstallment => {
     const dueDate =
-      frequency === "semanal"
+      frequency === "semanal" || frequency === "quinzenal"
         ? new Date(
             firstDate.getFullYear(),
             firstDate.getMonth(),
-            firstDate.getDate() + index * 7,
+            firstDate.getDate() + index * (frequency === "quinzenal" ? 15 : 7),
             12,
           )
         : new Date(firstDate.getFullYear(), firstDate.getMonth() + index, 1, 12);
