@@ -65,6 +65,16 @@ function LoginPage() {
       return;
     }
 
+    if (
+      normalized.includes("failed to fetch") ||
+      normalized.includes("fetch failed") ||
+      normalized.includes("networkerror") ||
+      normalized.includes("network request failed")
+    ) {
+      toast.error("Nao consegui conectar ao Supabase. Verifique se o projeto esta ativo.");
+      return;
+    }
+
     if (normalized.includes("password should be at least")) {
       toast.error("Use uma senha com pelo menos 6 caracteres.");
       return;
