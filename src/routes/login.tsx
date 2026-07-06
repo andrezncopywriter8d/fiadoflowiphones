@@ -65,6 +65,13 @@ function LoginPage() {
       return;
     }
 
+    if (normalized.includes("email not confirmed") || normalized.includes("email_not_confirmed")) {
+      toast.error(
+        "O Supabase ainda esta exigindo confirmacao de e-mail. Desative Confirm email no Auth para entrar automaticamente.",
+      );
+      return;
+    }
+
     if (
       normalized.includes("failed to fetch") ||
       normalized.includes("fetch failed") ||
@@ -81,7 +88,7 @@ function LoginPage() {
     }
 
     if (normalized.includes("user already registered")) {
-      toast.error("Esse e-mail já tem conta. Entre usando a senha cadastrada.");
+      toast.error("Esse e-mail ja tem conta. Entre usando a senha cadastrada.");
       return;
     }
 
@@ -99,7 +106,7 @@ function LoginPage() {
     try {
       const cleanEmail = email.trim().toLowerCase();
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: {
@@ -108,7 +115,16 @@ function LoginPage() {
           },
         });
         if (error) throw error;
-        toast.success("Conta criada! Você já está conectado.");
+
+        if (!data.session) {
+          toast.error(
+            "Conta criada, mas o Supabase ainda exige confirmacao de e-mail. Desative Confirm email no painel Auth para login automatico.",
+          );
+          setMode("login");
+          return;
+        }
+
+        toast.success("Conta criada! Voce ja esta conectado.");
         navigate({ to: "/" });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -195,7 +211,7 @@ function LoginPage() {
         </form>
 
         <p className="mt-5 text-center text-[12px] text-muted-foreground">
-          {mode === "login" ? "Ainda não tem conta?" : "Já tem uma conta?"}{" "}
+          {mode === "login" ? "Ainda nao tem conta?" : "Ja tem uma conta?"}{" "}
           <button
             type="button"
             onClick={() => setMode(mode === "login" ? "signup" : "login")}
