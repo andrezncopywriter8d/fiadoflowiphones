@@ -215,87 +215,6 @@ const stripSaleScheduleFields = <T extends Record<string, unknown>>(payload: T) 
   return legacyPayload;
 };
 
-const localProductKey = (userId: string) => `fiado:products:${userId}`;
-
-const readLocalProducts = (userId: string, search?: string) => {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(localProductKey(userId));
-  const products = raw ? (JSON.parse(raw) as RawProduct[]) : [];
-  const normalized = products
-    .map(normalizeProduct)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const term = search?.trim().toLowerCase();
-  if (!term) return normalized;
-  return normalized.filter(
-    (product) =>
-      product.nome.toLowerCase().includes(term) || (product.sku ?? "").toLowerCase().includes(term),
-  );
-};
-
-const writeLocalProducts = (userId: string, products: Product[]) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(localProductKey(userId), JSON.stringify(products));
-};
-
-const saveLocalProduct = (
-  userId: string,
-  payload: Partial<Product> & { id?: string; nome: string },
-) => {
-  const now = new Date().toISOString();
-  const products = readLocalProducts(userId);
-  const existing = payload.id ? products.find((product) => product.id === payload.id) : null;
-  const saved: Product = {
-    id: payload.id ?? crypto.randomUUID(),
-    nome: payload.nome,
-    categoria: payload.categoria ?? null,
-    marca: payload.marca ?? null,
-    sku: payload.sku ?? null,
-    codigo_barras: payload.codigo_barras ?? null,
-    fornecedor: payload.fornecedor ?? null,
-    custo_unitario: num(payload.custo_unitario),
-    preco_venda: num(payload.preco_venda),
-    quantidade: Number(payload.quantidade ?? 0),
-    estoque_minimo: Number(payload.estoque_minimo ?? 0),
-    localizacao: payload.localizacao ?? null,
-    garantia_dias: Number(payload.garantia_dias ?? 0),
-    status: payload.status ?? "ativo",
-    observacoes: payload.observacoes ?? null,
-    created_at: existing?.created_at ?? now,
-    updated_at: now,
-  };
-  writeLocalProducts(
-    userId,
-    existing
-      ? products.map((product) => (product.id === saved.id ? saved : product))
-      : [saved, ...products],
-  );
-  return saved;
-};
-
-const decrementLocalProductsForSale = (userId: string, items: SaleProductInput[]) => {
-  if (!items.length) return;
-  const products = readLocalProducts(userId);
-  if (!products.length) return;
-
-  const nextProducts = [...products];
-  for (const item of items) {
-    const productIndex = nextProducts.findIndex((product) => product.id === item.product_id);
-    if (productIndex < 0) continue;
-
-    const product = nextProducts[productIndex];
-    if (product.quantidade < item.quantidade) {
-      throw new Error(`Estoque insuficiente para ${item.product_name}`);
-    }
-    nextProducts[productIndex] = {
-      ...product,
-      quantidade: Math.max(product.quantidade - item.quantidade, 0),
-      updated_at: new Date().toISOString(),
-    };
-  }
-
-  writeLocalProducts(userId, nextProducts);
-};
-
 const normalizeSaleItem = (item: RawSaleItem): SaleItem => ({
   ...item,
   preco_unitario: num(item.preco_unitario),
@@ -304,10 +223,7 @@ const normalizeSaleItem = (item: RawSaleItem): SaleItem => ({
 
 const restoreSaleItemsToStock = async (saleId: string) => {
   const { data, error } = await supabase.from("sale_items").select("*").eq("sale_id", saleId);
-  if (error) {
-    if (isProductSchemaError(error)) return;
-    throw error;
-  }
+  if (error) throw error;
 
   const items = ((data ?? []) as RawSaleItem[]).map(normalizeSaleItem);
   for (const item of items) {
@@ -318,7 +234,6 @@ const restoreSaleItemsToStock = async (saleId: string) => {
       .eq("id", item.product_id)
       .maybeSingle();
     if (productError) {
-      if (isProductSchemaError(productError)) return;
       throw productError;
     }
     const { error: updateError } = await supabase
@@ -326,7 +241,6 @@ const restoreSaleItemsToStock = async (saleId: string) => {
       .update({ quantidade: (product?.quantidade ?? 0) + item.quantidade })
       .eq("id", item.product_id);
     if (updateError) {
-      if (isProductSchemaError(updateError)) return;
       throw updateError;
     }
   }
@@ -422,10 +336,7 @@ export function useProducts(search?: string) {
       let q = supabase.from("products").select("*").order("created_at", { ascending: false });
       if (search) q = q.or(`nome.ilike.%${search}%,sku.ilike.%${search}%`);
       const { data, error } = await q;
-      if (error) {
-        if (isProductSchemaError(error)) return readLocalProducts(user.id, search);
-        throw error;
-      }
+      if (error) throw error;
       return ((data ?? []) as RawProduct[]).map(normalizeProduct);
     },
   });
@@ -445,10 +356,7 @@ export function useUpsertProduct() {
           .eq("id", id)
           .select()
           .maybeSingle();
-        if (error) {
-          if (isProductSchemaError(error)) return saveLocalProduct(user.id, payload);
-          throw error;
-        }
+        if (error) throw error;
         return data ? normalizeProduct(data as RawProduct) : null;
       }
       const { data, error } = await supabase
@@ -456,10 +364,7 @@ export function useUpsertProduct() {
         .insert({ ...rest, user_id: user.id })
         .select()
         .maybeSingle();
-      if (error) {
-        if (isProductSchemaError(error)) return saveLocalProduct(user.id, payload);
-        throw error;
-      }
+      if (error) throw error;
       return data ? normalizeProduct(data as RawProduct) : null;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["products"] }),
@@ -472,16 +377,7 @@ export function useDeleteProduct() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("products").delete().eq("id", id);
-      if (error) {
-        if (user && isProductSchemaError(error)) {
-          writeLocalProducts(
-            user.id,
-            readLocalProducts(user.id).filter((product) => product.id !== id),
-          );
-          return;
-        }
-        throw error;
-      }
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["products"] }),
   });
@@ -524,10 +420,7 @@ export function useSaleItems(saleId: string | undefined) {
         .select("*")
         .eq("sale_id", saleId!)
         .order("created_at", { ascending: true });
-      if (error) {
-        if (isProductSchemaError(error)) return [];
-        throw error;
-      }
+      if (error) throw error;
       return ((data ?? []) as RawSaleItem[]).map(normalizeSaleItem);
     },
   });
@@ -614,20 +507,15 @@ export function useUpsertSale() {
         .from("sale_items")
         .delete()
         .eq("sale_id", saved.id);
-      if (deleteItemsError && !isProductSchemaError(deleteItemsError)) throw deleteItemsError;
+      if (deleteItemsError) throw deleteItemsError;
 
-      let canUseProductTables = !deleteItemsError;
-      if (items.length > 0 && canUseProductTables) {
+      if (items.length > 0) {
         for (const item of items) {
           const { data: product, error: productError } = await supabase
             .from("products")
             .select("quantidade")
             .eq("id", item.product_id)
             .maybeSingle();
-          if (productError && isProductSchemaError(productError)) {
-            canUseProductTables = false;
-            break;
-          }
           if (productError) throw productError;
           if (!product) throw new Error(`Produto "${item.product_name}" não encontrado`);
           if (product.quantidade < item.quantidade) {
@@ -636,7 +524,7 @@ export function useUpsertSale() {
         }
       }
 
-      if (items.length > 0 && canUseProductTables) {
+      if (items.length > 0) {
         const saleItems = items.map((item) => ({
           user_id: user.id,
           sale_id: saved!.id,
@@ -647,33 +535,23 @@ export function useUpsertSale() {
           subtotal: Number((item.preco_unitario * item.quantidade).toFixed(2)),
         }));
         const { error } = await supabase.from("sale_items").insert(saleItems);
-        if (error && isProductSchemaError(error)) {
-          canUseProductTables = false;
-        } else if (error) {
-          throw error;
-        }
+        if (error) throw error;
       }
 
-      if (items.length > 0 && canUseProductTables) {
+      if (items.length > 0) {
         for (const item of items) {
           const { data: product, error: productError } = await supabase
             .from("products")
             .select("quantidade")
             .eq("id", item.product_id)
             .maybeSingle();
-          if (productError && isProductSchemaError(productError)) break;
           if (productError) throw productError;
           const { error: updateError } = await supabase
             .from("products")
             .update({ quantidade: Math.max((product?.quantidade ?? 0) - item.quantidade, 0) })
             .eq("id", item.product_id);
-          if (updateError && isProductSchemaError(updateError)) break;
           if (updateError) throw updateError;
         }
-      }
-
-      if (items.length > 0 && !canUseProductTables) {
-        decrementLocalProductsForSale(user.id, items);
       }
 
       await supabase.from("reminders").delete().eq("sale_id", saved.id);

@@ -405,27 +405,9 @@ type LojaBusinessState = {
   payments: Payment[];
 };
 
-const lojaInventoryLocalKey = (userId: string) => `fiado:lojadeiphone:inventory:${userId}`;
 const lojaBusinessLocalKey = (userId: string) => `fiado:lojadeiphone:business:${userId}`;
 const LOJA_BUSINESS_SCOPE = "lojadeiphone-v2-business";
 const LOJA_BUSINESS_PRODUCT_SKU = "__LOJAIPHONE_V2_BUSINESS_STATE__";
-
-function readLocalLojaInventoryProducts(userId: string): InventoryProductRow[] {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(lojaInventoryLocalKey(userId));
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as InventoryProductRow[];
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalLojaInventoryProduct(userId: string, row: InventoryProductRow) {
-  if (typeof window === "undefined") return;
-  const rows = readLocalLojaInventoryProducts(userId).filter((item) => item.id !== row.id);
-  window.localStorage.setItem(lojaInventoryLocalKey(userId), JSON.stringify([row, ...rows]));
-}
 
 function readLocalLojaBusiness(userId: string): LojaBusinessState | null {
   if (typeof window === "undefined") return null;
@@ -1504,11 +1486,10 @@ function LojaDeIphonePage() {
   useEffect(() => {
     if (!userId) return;
 
-    const localBusiness = readLocalLojaBusiness(userId);
     setBusinessLoaded(false);
-    setClients(localBusiness?.clients ?? []);
-    setSales(localBusiness?.sales ?? []);
-    setPayments(localBusiness?.payments ?? []);
+    setClients([]);
+    setSales([]);
+    setPayments([]);
 
     let activeRequest = true;
     setInventoryLoading(true);
@@ -1522,16 +1503,21 @@ function LojaDeIphonePage() {
           setSales(accountBusiness.sales);
           setPayments(accountBusiness.payments);
           saveLocalLojaBusiness(userId, accountBusiness);
-          return;
-        }
-
-        if (localBusiness) {
-          await saveAccountLojaBusiness(userId, localBusiness);
         }
       })
       .catch((error) => {
         console.error("Nao consegui sincronizar os dados da V2 no banco da conta", error);
-        toast.warning("Usei o cache local porque o banco da conta nao respondeu agora");
+        const localBusiness = readLocalLojaBusiness(userId);
+        if (localBusiness) {
+          setClients(localBusiness.clients);
+          setSales(localBusiness.sales);
+          setPayments(localBusiness.payments);
+          toast.warning(
+            "Mostrando ultimo cache local. Novas alteracoes precisam salvar no Supabase.",
+          );
+        } else {
+          toast.error("Nao consegui carregar os dados da sua conta no Supabase");
+        }
       })
       .finally(() => {
         if (activeRequest) setBusinessLoaded(true);
@@ -1545,14 +1531,13 @@ function LojaDeIphonePage() {
       .then(({ data, error }) => {
         if (!activeRequest) return;
         if (error) {
-          const localRows = readLocalLojaInventoryProducts(userId);
-          hydrateInventoryRows(localRows, setPhones, setParts, setServices);
-          toast.info("Carreguei o estoque salvo localmente");
+          hydrateInventoryRows([], setPhones, setParts, setServices);
+          toast.error("Nao consegui carregar o estoque da sua conta no Supabase");
           return;
         }
 
         hydrateInventoryRows(
-          [...readLocalLojaInventoryProducts(userId), ...((data ?? []) as InventoryProductRow[])],
+          (data ?? []) as InventoryProductRow[],
           setPhones,
           setParts,
           setServices,
@@ -1570,10 +1555,12 @@ function LojaDeIphonePage() {
   useEffect(() => {
     if (!userId || !businessLoaded) return;
     const state = { clients, sales, payments };
-    saveLocalLojaBusiness(userId, state);
-    void saveAccountLojaBusiness(userId, state).catch((error) => {
-      console.error("Nao consegui salvar os dados da V2 no banco da conta", error);
-    });
+    void saveAccountLojaBusiness(userId, state)
+      .then(() => saveLocalLojaBusiness(userId, state))
+      .catch((error) => {
+        console.error("Nao consegui salvar os dados da V2 no banco da conta", error);
+        toast.error("Nao consegui salvar os dados da sua conta no Supabase");
+      });
   }, [businessLoaded, clients, payments, sales, userId]);
 
   const totals = useMemo(() => {
@@ -8362,16 +8349,6 @@ async function saveLojaInventoryProduct({
   data: Phone | Part | ServiceOrder;
 }) {
   const meta = inventoryMeta(kind, data as Phone & Part & ServiceOrder);
-  const fallbackRow: InventoryProductRow = {
-    id: crypto.randomUUID(),
-    nome: name,
-    sku,
-    preco_venda: salePrice,
-    quantidade: quantity,
-    estoque_minimo: minimum,
-    status,
-    observacoes: JSON.stringify(meta),
-  };
   const { data: saved, error } = await supabase
     .from("products")
     .insert({
@@ -8389,9 +8366,8 @@ async function saveLojaInventoryProduct({
 
   if (error || !saved) {
     console.error("Erro ao salvar estoque da loja de iPhone", error);
-    saveLocalLojaInventoryProduct(userId, fallbackRow);
-    toast.warning("O banco recusou agora, mas salvei o item no estoque local desta conta");
-    return parseInventoryProduct(fallbackRow)?.item ?? null;
+    toast.error("Nao consegui salvar o item no banco da sua conta. Nada foi salvo localmente.");
+    return null;
   }
 
   const parsed = parseInventoryProduct(saved as InventoryProductRow);
@@ -8432,20 +8408,18 @@ async function updateLojaInventoryProduct(
         : (item as ServiceOrder).imei || `OS-${item.id}`;
 
   const meta = inventoryMeta(kind, item as Phone & Part & ServiceOrder);
-  const fallbackRow: InventoryProductRow = {
-    id: item.productId || crypto.randomUUID(),
-    nome: name,
-    sku,
-    preco_venda: price,
-    quantidade: quantity,
-    estoque_minimo: minimum,
-    status: item.status,
-    observacoes: JSON.stringify(meta),
-  };
-  if (!item.productId) {
-    saveLocalLojaInventoryProduct(userId!, fallbackRow);
-    return parseInventoryProduct(fallbackRow)?.item ?? null;
-  }
+  if (!item.productId)
+    return saveLojaInventoryProduct({
+      userId: userId!,
+      kind,
+      name,
+      sku,
+      salePrice: price,
+      quantity,
+      minimum,
+      status: item.status,
+      data: item,
+    });
 
   const { data: saved, error } = await supabase
     .from("products")
@@ -8463,10 +8437,6 @@ async function updateLojaInventoryProduct(
     .maybeSingle();
 
   if (error || !saved) {
-    if (userId) {
-      saveLocalLojaInventoryProduct(userId, fallbackRow);
-      return parseInventoryProduct(fallbackRow)?.item ?? null;
-    }
     toast.error("Nao consegui atualizar o item no banco da sua conta");
     return null;
   }
